@@ -1,4 +1,4 @@
-package com.example.compose
+package com.samstechlab.compose
 import androidx.compose.ui.graphics.Color
 
 val primaryLight = Color(0xFF415F91)

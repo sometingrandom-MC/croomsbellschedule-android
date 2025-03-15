@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.croomsbellschedule"
+    namespace = "com.samstechlab.croomsbellschedule"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.croomsbellschedule"
+        applicationId = "com.samstechlab.croomsbellschedule"
         minSdk = 30
         targetSdk = 34
         versionCode = 1

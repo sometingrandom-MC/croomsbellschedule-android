@@ -1,4 +1,4 @@
-package com.example.croomsbellschedule
+package com.samstechlab.croomsbellschedule
 
 import android.content.Context
 import androidx.compose.runtime.Composable

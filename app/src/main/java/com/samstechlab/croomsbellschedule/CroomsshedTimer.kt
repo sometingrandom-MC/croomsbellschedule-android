@@ -1,4 +1,4 @@
-package com.example.croomsbellschedule
+package com.samstechlab.croomsbellschedule
 
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
@@ -18,8 +18,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.example.croomsbellschedule.ScheduleFetcher.CACHE_DURATION_HOURS
-import com.example.croomsbellschedule.ScheduleFetcher.parseScheduleFromJson
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 
