@@ -26,6 +26,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,7 +93,7 @@ fun ScrollContentHome(innerPadding: PaddingValues) {
     val context = LocalContext.current
     var timerText by remember { mutableStateOf("loading...") }
     var connectionStatus by remember { mutableStateOf("Disconnected") }
-    var status by remember { mutableStateOf(1) }
+    var status by remember { mutableIntStateOf(1) }
     LaunchedEffect(key1 = true)  { CoroutineScope(Dispatchers.IO).launch {
         val formatedTimer = formatedTimer(context)
         timerText = formatedTimer.first
