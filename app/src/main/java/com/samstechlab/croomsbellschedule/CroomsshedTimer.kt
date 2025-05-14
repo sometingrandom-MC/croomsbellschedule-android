@@ -1,25 +1,25 @@
 package com.samstechlab.croomsbellschedule
 
-import java.time.LocalTime
-import java.time.temporal.ChronoUnit
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
-
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
-import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.flow.Flow
 import java.time.Instant
+import java.time.LocalTime
+import java.time.temporal.ChronoUnit
+import java.util.Calendar
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "my_preferences")
 private val CACHED_SCHEDULE_KEY = stringPreferencesKey("cached_schedule")
@@ -168,20 +168,31 @@ object ScheduleFetcher {
         context: Context,
         schedule: List<List<ScheduleBlock>>
     ): List<Any> {
+        val calendar = Calendar.getInstance()
         val myDataStoreManager = MyDataStoreManager(context)
         var lunch: String
-
-        runBlocking {
-            val lunchPreference =
-                myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).first()
-                    ?: "Lunch A"
-            lunch = lunchPreference
+        if (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.WEDNESDAY) {
+            runBlocking {
+                val lunchPreference =
+                    myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).first()
+                        ?: "Lunch A"
+                lunch = lunchPreference
+            }
+        } else {
+            runBlocking {
+                val lunchPreference =
+                    myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).first()
+                        ?: "Lunch A"
+                lunch = lunchPreference
+            }
         }
+
+
         val lunchInt: Int
-        if (lunch == "Lunch A")
-            lunchInt = 0
+        lunchInt = if (lunch == "Lunch A")
+            0
         else
-            lunchInt = 1
+            1
 
         val todaySchedule = schedule[lunchInt]
         for (block in todaySchedule) {

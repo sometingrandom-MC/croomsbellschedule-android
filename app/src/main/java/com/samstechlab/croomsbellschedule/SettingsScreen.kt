@@ -82,10 +82,6 @@ fun SettingsScreen() {
 }
 
 
-suspend fun data(context: Context, value: String) {
-    val myDataStoreManager = MyDataStoreManager(context)
-    myDataStoreManager.saveData(stringPreferencesKey("lunch_preference"), value)
-}
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 
@@ -103,8 +99,11 @@ fun ScrollContent(innerPadding: PaddingValues) {
         .padding(20.dp)
         .verticalScroll(state = ScrollState(0), enabled = true, reverseScrolling = false)) {
         Text("Lunch Period Selection", modifier = Modifier.padding(10.dp),style = LocalTextStyle.current)
+
         val myDataStoreManager = MyDataStoreManager(context)
-        var selectedIndex by remember { mutableIntStateOf(0) }
+        var lunchIndex by remember { mutableIntStateOf(0) }
+        var altlunchIndex by remember { mutableIntStateOf(0) }
+
         var p1 by remember { mutableStateOf("Period 1") }
         var p2 by remember { mutableStateOf("Period 2") }
         var p3 by remember { mutableStateOf("Period 3") }
@@ -113,17 +112,32 @@ fun ScrollContent(innerPadding: PaddingValues) {
         var p6 by remember { mutableStateOf("Period 6") }
         var p7 by remember { mutableStateOf("Period 7") }
 
-        var selectedIndexStr: String
+        var lunchselectedIndexStr: String
+        var altlunchselectedIndexStr: String
+
         runBlocking {
                 val lunchPreference =
                     myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).first()
                         ?: 0
-                selectedIndexStr = lunchPreference.toString()
-                selectedIndex = if (selectedIndexStr == "Lunch A")
+                lunchselectedIndexStr = lunchPreference.toString()
+                lunchIndex = if (lunchselectedIndexStr == "Lunch A")
                     0
                 else
                     1
             }
+
+        runBlocking {
+            val altLunchPreference =
+                myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).first()
+                    ?: 0
+            altlunchselectedIndexStr = altLunchPreference.toString()
+            altlunchIndex = if (altlunchselectedIndexStr == "Lunch A")
+                0
+            else
+                1
+        }
+
+
 
 
         runBlocking {
@@ -155,54 +169,71 @@ fun ScrollContent(innerPadding: PaddingValues) {
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                     label = { Text(label) },
-                    onClick = { selectedIndex = index
+                    onClick = { lunchIndex = index
                               coroutineScope.launch {myDataStoreManager.saveData(stringPreferencesKey("lunch_preference"), options[index])}},
-                    selected = index == selectedIndex
+                    selected = index == lunchIndex
                 )
 
             }
         }
+
+        Text("Wednesday Lunch Period Selection", modifier = Modifier.padding(10.dp),style = LocalTextStyle.current)
+
+        SingleChoiceSegmentedButtonRow {
+            options.forEachIndexed { index, label ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                    label = { Text(label) },
+                    onClick = { altlunchIndex = index
+                        coroutineScope.launch {myDataStoreManager.saveData(stringPreferencesKey("alt_lunch_preference"), options[index])}},
+                    selected = index == altlunchIndex
+                )
+
+            }
+        }
+
+
         Text("Period Names", modifier = Modifier.padding(10.dp), style = LocalTextStyle.current)
         TextField(
-            value = if(p1 != "Period 1") p1 else "",
-            onValueChange = {newText -> p1 = newText
-                            coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p1"), p1) }},
+            value = if (p1 != "Period 1") p1 else "",
+            onValueChange = {p1 = it
+                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p1"), p1) }},
             label = ({ Text("Period 1") })
 
         )
         TextField(
             value = if(p2 != "Period 2") p2 else "",
-            onValueChange = {newText -> p2 = newText
+            onValueChange = {p2 = it
                 coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p2"), p2) }},
             label = ({ Text("Period 2") })
         )
         TextField(
             value = if(p3 != "Period 3") p3 else "",
-            onValueChange = {newText -> p3 = newText
+            onValueChange = {p3 = it
                 coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p3"), p3) }},
             label = ({ Text("Period 3") })
         )
         TextField(
             value = if(p4 != "Period 4") p4 else "",
-            onValueChange = {newText -> p4 = newText
+            onValueChange = {p4 = it
                 coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p4"), p4,) }},
             label = ({ Text("Period 4") })
         )
         TextField(
             value = if(p5 != "Period 5") p5 else "",
-            onValueChange = {newText -> p5 = newText
+            onValueChange = {p5 = it
                 coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p5"), p5,) }},
             label = ({ Text("Period 5") })
         )
         TextField(
             value = if(p6 != "Period 6") p6 else "",
-            onValueChange = {newText -> p6 = newText
+            onValueChange = {p6 = it
                 coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p6"), p6,) }},
             label = ({ Text("Period 6") })
         )
         TextField(
             value = if(p7 != "Period 7") p7 else "",
-            onValueChange = {newText -> p7 = newText
+            onValueChange = {p7 = it
                 coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p7"), p7,) }},
             label = ({ Text("Period 7") })
         )
