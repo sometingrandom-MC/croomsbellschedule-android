@@ -8,9 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Badge
@@ -94,9 +96,9 @@ class MainActivity : ComponentActivity() {
                     ),
                     BottomNavigationItem(
                         title = "Countdowns",
-                        selectedIcon = Icons.Filled.DateRange,
-                        unselectedIcon = Icons.Outlined.DateRange,
-                        hasNews = false,
+                        selectedIcon = Icons.Filled.Email,
+                        unselectedIcon = Icons.Outlined.Email,
+                        hasNews = true,
                     ),
                     BottomNavigationItem(
                         title = "Settings",

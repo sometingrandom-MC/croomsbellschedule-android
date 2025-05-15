@@ -1,9 +1,13 @@
 package com.samstechlab.croomsbellschedule
 
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.runBlocking
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +29,7 @@ fun CountdownsScreen() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
+
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             val containerColor = if (scrollBehavior.state.collapsedFraction > 0.5f){
@@ -40,8 +46,9 @@ fun CountdownsScreen() {
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
                 title = {
+
                     Text(
-                        "Countdowns",
+                        "Feed",
                         fontSize = fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -59,13 +66,17 @@ fun CountdownsScreen() {
 
 @Composable
 fun ScrollContentCountdowns(innerPadding: PaddingValues) {
-
+    var text: String
+    runBlocking {
+        text = getFeedApiResponse().toString()
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(innerPadding),
+            .padding(innerPadding)
+            .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.Center
     ) {
-        Text("Countdowns")
+        Text(text)
     }
 }

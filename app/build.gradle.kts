@@ -89,6 +89,7 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation(libs.androidx.animation)
     implementation(libs.androidx.core.splashscreen)
+    implementation(libs.kotlinx.serialization.json)
 
 }
 dependencies {

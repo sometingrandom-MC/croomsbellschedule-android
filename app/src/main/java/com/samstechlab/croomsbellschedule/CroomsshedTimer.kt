@@ -24,8 +24,6 @@ import java.util.Calendar
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "my_preferences")
 private val CACHED_SCHEDULE_KEY = stringPreferencesKey("cached_schedule")
 private val CACHE_TIMESTAMP_KEY = stringPreferencesKey("cache_timestamp")
-// Now you can use 'dataStore' within any Context-aware class
-// For example, inside an Activity or a class that takes a Context as a parameter:
 
 class MyDataStoreManager(private val context: Context) {
 
