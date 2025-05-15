@@ -75,6 +75,14 @@ fun SettingsScreen() {
                 scrollBehavior = scrollBehavior
             )
         },
+        floatingActionButton = { // Added FloatingActionButton here
+            FloatingActionButton(
+                onClick = { println("Clicked") },
+                containerColor = MaterialTheme.colorScheme.primary,
+            ) {
+                Icon(Icons.Filled.Check, "Save settings") // Using a Save icon
+            }
+        }
     ) { innerPadding ->
         ScrollContent(innerPadding)
     }
