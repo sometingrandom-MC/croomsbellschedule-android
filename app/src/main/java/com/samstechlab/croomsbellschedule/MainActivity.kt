@@ -6,7 +6,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.*
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
@@ -17,6 +19,8 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -26,7 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.compose.rememberNavController
 import com.samstechlab.compose.AppTheme
@@ -73,6 +79,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,9 +100,10 @@ class MainActivity : ComponentActivity() {
                         selectedIcon = Icons.Filled.Home,
                         unselectedIcon = Icons.Outlined.Home,
                         hasNews = false,
+
                     ),
                     BottomNavigationItem(
-                        title = "Countdowns",
+                        title = "Feed",
                         selectedIcon = Icons.Filled.Email,
                         unselectedIcon = Icons.Outlined.Email,
                         hasNews = true,
@@ -113,7 +121,7 @@ class MainActivity : ComponentActivity() {
 
                     Scaffold (
                         bottomBar = {
-                            NavigationBar {
+                            HorizontalFloatingToolbar(true, Modifier.padding(bottom = 10.dp, start = 20.dp, end = 20.dp).navigationBarsPadding()) {
                                 items.forEachIndexed { index, item ->
                                     NavigationBarItem(
                                         selected = selectedItemIndex == index,

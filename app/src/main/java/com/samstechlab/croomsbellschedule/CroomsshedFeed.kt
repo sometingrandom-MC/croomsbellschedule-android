@@ -2,48 +2,51 @@ package com.samstechlab.croomsbellschedule
 
 import android.content.Context
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.samstechlab.croomsbellschedule.ScheduleFetcher.parseScheduleFromJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import kotlinx.serialization.Serializable
 
+// DataStore keys
+private val CACHED_FEED_KEY = stringPreferencesKey("cached_feed_messages") // Changed key name for clarity
+private val CACHE_TIMESTAMP_KEY = stringPreferencesKey("cache_timestamp_feed_messages") // Changed key name for clarity
 
-private val CACHED_FEED_KEY = stringPreferencesKey("cached_feed")
-private val CACHE_TIMESTAMP_KEY = stringPreferencesKey("cache_timestamp_feed")
-private const val FEED_REFRESH_DURATION = 1L
+private const val FEED_REFRESH_DURATION_MINUTES = 60L // Cache duration, e.g., 60 minutes
 
-
-
-@Serializable
+@kotlinx.serialization.Serializable
 data class ApiResponse(
     val status: String,
     val data: List<FeedItem>
 )
 
-@Serializable
+@kotlinx.serialization.Serializable
 data class FeedItem(
-    val data: String,
+    val data: String, // This is the message content
     val store: String,
     val id: String,
     val create: String,
     val delete: String,
-    val createdBy: String,
-    val uid: String,
+    val createdBy: String? = null,
+    val uid: String? = null,
     val verified: Boolean
 )
 
-suspend fun getFeedApiResponse(): String? {
+/**
+ * Fetches the raw API response string for the feed.
+ */
+suspend fun getFeedApiResponseString(): String? {
     return withContext(Dispatchers.IO) {
         val client = OkHttpClient()
         val request = Request.Builder()
-            .url("https://api.croomssched.tech/feed")
+            .url("https://api.croomssched.tech/feed") // Centralized URL
             .build()
 
         try {
@@ -51,73 +54,111 @@ suspend fun getFeedApiResponse(): String? {
             if (response.isSuccessful) {
                 response.body?.string()
             } else {
-                // Handle unsuccessful response (e.g., 404, 500)
                 println("API request failed with code: ${response.code}")
                 null
             }
         } catch (e: IOException) {
-            // Handle network or other exceptions
             println("Error during API request: ${e.message}")
             null
         }
     }
 }
 
+/**
+ * Configured Json instance for Kotlinx Serialization.
+ */
+private val jsonParser = Json { ignoreUnknownKeys = true; isLenient = true }
+
+/**
+ * Parses the JSON string containing feed items into a list of message strings.
+ * Uses Kotlinx Serialization.
+ *
+ * @param jsonString The JSON string to parse.
+ * @return A Result containing a list of messages (String) or an error.
+ */
+fun parseMessagesFromFeedJson(jsonString: String): Result<List<String>> {
+    return try {
+        val apiResponse = jsonParser.decodeFromString<ApiResponse>(jsonString)
+        if (apiResponse.status == "OK") {
+            val messages = apiResponse.data.map { it.data } // Extract the 'data' field (message content)
+            Result.success(messages)
+        } else {
+            Result.failure(Exception("API status was not OK: ${apiResponse.status}"))
+        }
+    } catch (e: Exception) { // Catching general Exception for serialization and other issues
+        println("Error parsing feed messages JSON: ${e.message}")
+        Result.failure(e)
+    }
+}
+
+
 class CroomsshedFeed {
 
-
-
-    suspend fun fetchAndParseFeed(context: Context, refresh: Boolean = false): Triple<Result<List<List<ScheduleBlock>>>, String, Int> =
-
+    /**
+     * Fetches the feed and parses it into a list of message strings.
+     *
+     * @param context The application context for accessing DataStore.
+     * @param refresh Whether to force a refresh, ignoring the cache.
+     * @return A Triple containing:
+     * 1. Result<List<String>>: The list of messages or an error.
+     * 2. String: A status message about the data fetch.
+     * 3. Int: A status code (e.g., 1 for success, 0 for error/fallback).
+     */
+    public suspend fun fetchAndGetFeedMessages(context: Context, refresh: Boolean): Triple<Result<List<String>>, String, Int> =
         withContext(Dispatchers.IO) {
             try {
                 val myDataStoreManager = MyDataStoreManager(context)
-                val connection: String
-                val status: Int
-                // Try to get cached data
-                val cachedSchedule = myDataStoreManager.getData(CACHED_FEED_KEY).first()
-                val cachedTimestamp = myDataStoreManager.getData(CACHE_TIMESTAMP_KEY).first()
-                var minutesSinceCache: Long
+                val connectionStatusMessage: String
+                val statusCode: Int // 0 for error/fallback, 1 for success
 
-                // Check if cache is valid
-                if (cachedSchedule != null && cachedTimestamp != null) {
-                    val timestamp = Instant.parse(cachedTimestamp)
-                    val now = Instant.now()
-                    minutesSinceCache = ChronoUnit.MINUTES.between(timestamp, now)
+                // Try to get cached raw JSON data
+                val cachedRawJson = myDataStoreManager.getData(CACHED_FEED_KEY).first()
+                val cachedTimestampString = myDataStoreManager.getData(CACHE_TIMESTAMP_KEY).first()
+                var minutesSinceCache: Long = Long.MAX_VALUE
 
-
-                    if (minutesSinceCache < FEED_REFRESH_DURATION && !refresh) {
-                        // Use cached data if it's less than 1 hour old
-                        status = 1
-                        connection = "Fetched $minutesSinceCache minutes ago"
-                        return@withContext Triple(parseScheduleFromJson(cachedSchedule), connection, status)
+                if (cachedTimestampString != null) {
+                    try {
+                        val timestamp = Instant.parse(cachedTimestampString)
+                        minutesSinceCache = ChronoUnit.MINUTES.between(timestamp, Instant.now())
+                    } catch (e: Exception) {
+                        println("Error parsing cached timestamp for messages: ${e.message}")
+                        // Invalidate cache by keeping minutesSinceCache high
                     }
                 }
 
-                // If cache is invalid or missing, fetch new data
-                val response = getApiResponse()
-                if (response != null) {
-                    // Save new data to cache
-                    myDataStoreManager.saveData(CACHED_FEED_KEY, response)
+                // Check if cache is valid and refresh is not forced
+                if (cachedRawJson != null && minutesSinceCache < FEED_REFRESH_DURATION_MINUTES && !refresh) {
+                    statusCode = 1
+                    connectionStatusMessage = "Fetched messages $minutesSinceCache minutes ago (cached)"
+                    // Parse the cached JSON for messages
+                    return@withContext Triple(parseMessagesFromFeedJson(cachedRawJson), connectionStatusMessage, statusCode)
+                }
+
+                // If cache is invalid, missing, or refresh is forced, fetch new data
+                val newRawJson = getFeedApiResponseString() // Fetches the raw JSON string
+                if (newRawJson != null) {
+                    // Save new raw JSON data to cache
+                    myDataStoreManager.saveData(CACHED_FEED_KEY, newRawJson)
                     myDataStoreManager.saveData(CACHE_TIMESTAMP_KEY, Instant.now().toString())
-                    minutesSinceCache = ChronoUnit.MINUTES.between(
-                        Instant.parse(Instant.now().toString()), Instant.parse(
-                            Instant.now().toString()))
-                    status = 1
-                    connection = "Fetched $minutesSinceCache minutes ago"
-                    return@withContext Triple(parseScheduleFromJson(response), connection, status)
+                    statusCode = 1
+                    connectionStatusMessage = "Fetched fresh messages just now"
+                    // Parse the new JSON for messages
+                    return@withContext Triple(parseMessagesFromFeedJson(newRawJson), connectionStatusMessage, statusCode)
                 } else {
-                    // If API call fails but we have cached data, use it as fallback
-                    if (cachedSchedule != null) {
-                        minutesSinceCache = ChronoUnit.MINUTES.between(Instant.parse(cachedTimestamp), Instant.now())
-                        connection = "Cannot update schedule, using data from $minutesSinceCache minutes ago"
-                        status = 0
-                        return@withContext Triple(parseScheduleFromJson(cachedSchedule), connection, status)
+                    // API call failed, try to use stale cache as fallback if available
+                    if (cachedRawJson != null) {
+                        statusCode = 0 // Indicate fallback/error
+                        connectionStatusMessage = "Failed to update messages, using data from $minutesSinceCache minutes ago (stale cache)"
+                        return@withContext Triple(parseMessagesFromFeedJson(cachedRawJson), connectionStatusMessage, statusCode)
                     }
-                    throw IOException("Failed to fetch schedule and no cache available")
+                    // No new data and no cache at all
+                    throw IOException("Failed to fetch messages and no cache available")
                 }
             } catch (e: Exception) {
-                return@withContext Triple(Result.failure(e), "Cannot fetch data", 0)
+                println("Exception in fetchAndGetFeedMessages: ${e.message}")
+                return@withContext Triple(Result.failure(e), "Cannot fetch message data", 0)
             }
         }
 }
+
+

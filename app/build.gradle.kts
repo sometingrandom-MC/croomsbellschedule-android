@@ -5,11 +5,12 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    alias(libs.plugins.jetbrains.kotlin.serialization) // This should now resolve
 }
 
 android {
     namespace = "com.samstechlab.croomsbellschedule"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.samstechlab.croomsbellschedule"
@@ -70,7 +71,9 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    implementation("androidx.compose.material3:material3:1.2.1")
+    implementation("androidx.compose.material:material-icons-core:1.7.0-beta02")
+    implementation(libs.kotlinx.serialization.json)
+    implementation("androidx.compose.material3:material3:1.4.0-alpha10")
     implementation("androidx.compose.material3:material3-window-size-class:1.2.1")
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.3.0-beta05")
     implementation("androidx.datastore:datastore-preferences:1.1.2")
@@ -84,12 +87,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
     implementation (libs.androidx.datastore.datastore.preferences)
+
     implementation(libs.jetbrains.kotlinx.coroutines.core)
     implementation(libs.androidx.glance)
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation(libs.androidx.animation)
     implementation(libs.androidx.core.splashscreen)
-    implementation(libs.kotlinx.serialization.json)
 
 }
 dependencies {
