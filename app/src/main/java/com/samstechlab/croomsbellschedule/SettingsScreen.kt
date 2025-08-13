@@ -12,8 +12,11 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -31,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.ToggleButton
@@ -100,14 +104,7 @@ fun SettingsScreen() {
                 scrollBehavior = scrollBehavior
             )
         },
-        floatingActionButton = { // Added FloatingActionButton here
-            FloatingActionButton(
-                onClick = { println("Clicked") },
-                containerColor = MaterialTheme.colorScheme.primary,
-            ) {
-                Icon(Icons.Filled.Check, "Save settings") // Using a Save icon
-            }
-        }
+
     ) { innerPadding ->
         ScrollContent(innerPadding)
     }
@@ -131,18 +128,19 @@ fun ScrollContent(innerPadding: PaddingValues) {
         .fillMaxSize()
         .padding(20.dp)
         .verticalScroll(state = ScrollState(0), enabled = true, reverseScrolling = false)) {
-        Text("Lunch Period Selection", modifier = Modifier.padding(10.dp),style = LocalTextStyle.current)
+        Text(
+            "Lunch Period Selection",
+            modifier = Modifier.padding(10.dp),
+            style = LocalTextStyle.current
+        )
 
         val myDataStoreManager = MyDataStoreManager(context)
         var lunchIndex by remember { mutableIntStateOf(0) }
         var altlunchIndex by remember { mutableIntStateOf(0) }
-        var p1 by remember { mutableStateOf("Period 1") }
-        var p2 by remember { mutableStateOf("Period 2") }
-        var p3 by remember { mutableStateOf("Period 3") }
-        var p4 by remember { mutableStateOf("Period 4") }
-        var p5 by remember { mutableStateOf("Period 5") }
-        var p6 by remember { mutableStateOf("Period 6") }
-        var p7 by remember { mutableStateOf("Period 7") }
+
+        val p = Array(8) { "" }
+
+
 
         var lunchselectedIndexStr: String
         var altlunchselectedIndexStr: String
@@ -173,22 +171,27 @@ fun ScrollContent(innerPadding: PaddingValues) {
 
 
         runBlocking {
-
-            p1 =
-                myDataStoreManager.getData(stringPreferencesKey("p1")).first() ?: "Period 1"
-            p2 =
-                myDataStoreManager.getData(stringPreferencesKey("p2")).first() ?: "Period 2"
-            p3 =
-                myDataStoreManager.getData(stringPreferencesKey("p3")).first() ?: "Period 3"
-            p4 =
-                myDataStoreManager.getData(stringPreferencesKey("p4")).first() ?: "Period 4"
-            p5 =
-                myDataStoreManager.getData(stringPreferencesKey("p5")).first() ?: "Period 5"
-            p6 =
-                myDataStoreManager.getData(stringPreferencesKey("p6")).first() ?: "Period 6"
-            p7 =
-                myDataStoreManager.getData(stringPreferencesKey("p7")).first() ?: "Period 7"
+            for (i in 1..7) {
+                p[i] =
+                    myDataStoreManager.getData(stringPreferencesKey("p$i")).first() ?: "Period $i"
+            }
         }
+        var p1l by remember { mutableStateOf((if (p[1]!= "Period 1") p[1] else "")) }
+        var p2l by remember { mutableStateOf((if (p[2] != "Period 2") p[2] else "")) }
+        var p3l by remember { mutableStateOf((if (p[3] != "Period 3") p[3] else "")) }
+        var p4l by remember { mutableStateOf((if (p[4] != "Period 4") p[4] else "")) }
+        var p5l by remember { mutableStateOf((if (p[5] != "Period 5") p[5] else "")) }
+        var p6l by remember { mutableStateOf((if (p[6] != "Period 6") p[6] else "")) }
+        var p7l by remember { mutableStateOf((if (p[7] != "Period 7") p[7] else "")) }
+
+        var p1e by remember { mutableStateOf(true) }
+        var p2e by remember { mutableStateOf(true) }
+        var p3e by remember { mutableStateOf(true) }
+        var p4e by remember { mutableStateOf(true) }
+        var p5e by remember { mutableStateOf(true) }
+        var p6e by remember { mutableStateOf(true) }
+        var p7e by remember { mutableStateOf(true) }
+
 
         val options = listOf("Lunch A", "Lunch B")
         AnimatedVisibility(visible = true, enter = fadeIn()) {
@@ -199,23 +202,41 @@ fun ScrollContent(innerPadding: PaddingValues) {
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                     label = { Text(label) },
-                    onClick = { lunchIndex = index
-                        coroutineScope.launch {myDataStoreManager.saveData(stringPreferencesKey("lunch_preference"), options[index])}},
+                    onClick = {
+                        lunchIndex = index
+                        coroutineScope.launch {
+                            myDataStoreManager.saveData(
+                                stringPreferencesKey("lunch_preference"),
+                                options[index]
+                            )
+                        }
+                    },
                     selected = index == lunchIndex
                 )
 
             }
         }
 
-        Text("Wednesday Lunch Period Selection", modifier = Modifier.padding(10.dp),style = LocalTextStyle.current)
+        Text(
+            "Wednesday Lunch Period Selection",
+            modifier = Modifier.padding(10.dp),
+            style = LocalTextStyle.current
+        )
 
         SingleChoiceSegmentedButtonRow {
             options.forEachIndexed { index, label ->
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                     label = { Text(label) },
-                    onClick = { altlunchIndex = index
-                        coroutineScope.launch {myDataStoreManager.saveData(stringPreferencesKey("alt_lunch_preference"), options[index])}},
+                    onClick = {
+                        altlunchIndex = index
+                        coroutineScope.launch {
+                            myDataStoreManager.saveData(
+                                stringPreferencesKey("alt_lunch_preference"),
+                                options[index]
+                            )
+                        }
+                    },
                     selected = index == altlunchIndex
                 )
 
@@ -224,49 +245,172 @@ fun ScrollContent(innerPadding: PaddingValues) {
 
 
         Text("Period Names", modifier = Modifier.padding(10.dp), style = LocalTextStyle.current)
-        TextField(
-            value = if (p1 != "Period 1") p1 else "",
-            onValueChange = {p1 = it
-                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p1"), p1) }},
-            label = ({ Text("Period 1") })
+        Row {
+            TextField(
+                value = (p1l),
+                onValueChange = {
+                    p1l = it
+                    coroutineScope.launch {
+                        myDataStoreManager.saveData(
+                            stringPreferencesKey("p1"),
+                            p1l
+                        )
+                    }
+                },
+                label = ({ Text("Period 1") })
 
-        )
-        TextField(
-            value = if(p2 != "Period 2") p2 else "",
-            onValueChange = {p2 = it
-                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p2"), p2) }},
-            label = ({ Text("Period 2") })
-        )
-        TextField(
-            value = if(p3 != "Period 3") p3 else "",
-            onValueChange = {p3 = it
-                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p3"), p3) }},
-            label = ({ Text("Period 3") })
-        )
-        TextField(
-            value = if(p4 != "Period 4") p4 else "",
-            onValueChange = {p4 = it
-                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p4"), p4) }},
-            label = ({ Text("Period 4") })
-        )
-        TextField(
-            value = if(p5 != "Period 5") p5 else "",
-            onValueChange = {p5 = it
-                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p5"), p5) }},
-            label = ({ Text("Period 5") })
-        )
-        TextField(
-            value = if(p6 != "Period 6") p6 else "",
-            onValueChange = {p6 = it
-                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p6"), p6) }},
-            label = ({ Text("Period 6") })
-        )
-        TextField(
-            value = if(p7 != "Period 7") p7 else "",
-            onValueChange = {p7 = it
-                coroutineScope.launch { myDataStoreManager.saveData(stringPreferencesKey("p7"), p7) }},
-            label = ({ Text("Period 7") })
-        )
+            )
+            Spacer(
+                Modifier.width(8.dp)
+            )
+            /*Switch(
+                checked = p1e,
+                onCheckedChange = { p1e = it }
+            )*/
+        }
+
+        Row {
+            TextField(
+                value = (p2l),
+                onValueChange = {
+                    p2l = it
+                    coroutineScope.launch {
+                        myDataStoreManager.saveData(
+                            stringPreferencesKey("p2"),
+                            p2l
+                        )
+                    }
+                },
+                label = ({ Text("Period 2") })
+
+            )
+            Spacer(
+                Modifier.width(8.dp)
+            )
+            /*Switch(
+            checked = p1e,
+            onCheckedChange = { p1e = it }
+                        )*/
+        }
+        Row {
+            TextField(
+                value = (p3l),
+                onValueChange = {
+                    p3l = it
+                    coroutineScope.launch {
+                        myDataStoreManager.saveData(
+                            stringPreferencesKey("p3"),
+                            p3l
+                        )
+                    }
+                },
+                label = ({ Text("Period 3") })
+
+            )
+            Spacer(
+                Modifier.width(8.dp)
+            )
+            /*Switch(
+                checked = p3e,
+                onCheckedChange = { p3e = it }
+            )*/
+        }
+
+        Row {
+            TextField(
+                value = (p4l),
+                onValueChange = {
+                    p4l = it
+                    coroutineScope.launch {
+                        myDataStoreManager.saveData(
+                            stringPreferencesKey("p4"),
+                            p4l
+                        )
+                    }
+                },
+                label = ({ Text("Period 4") })
+
+            )
+            Spacer(
+                Modifier.width(8.dp)
+            )
+            /*Switch(
+                checked = p4e,
+                onCheckedChange = { p4e = it }
+            )*/
+        }
+
+        Row {
+            TextField(
+                value = (p5l),
+                onValueChange = {
+                    p5l = it
+                    coroutineScope.launch {
+                        myDataStoreManager.saveData(
+                            stringPreferencesKey("p5"),
+                            p5l
+                        )
+                    }
+                },
+                label = ({ Text("Period 5") })
+
+            )
+            Spacer(
+                Modifier.width(8.dp)
+            )
+            /*Switch(
+                checked = p5e,
+                onCheckedChange = { p5e = it }
+            )*/
+        }
+
+        Row {
+            TextField(
+                value = (p6l),
+                onValueChange = {
+                    p6l = it
+                    coroutineScope.launch {
+                        myDataStoreManager.saveData(
+                            stringPreferencesKey("p6"),
+                            p6l
+                        )
+                    }
+                },
+                label = ({ Text("Period 6") })
+
+            )
+            Spacer(
+                Modifier.width(8.dp)
+            )
+            /*Switch(
+                checked = p6e,
+                onCheckedChange = { p6e = it }
+            )*/
+        }
+
+        Row {
+            TextField(
+                value = (p7l),
+                onValueChange = {
+                    p7l = it
+                    coroutineScope.launch {
+                        myDataStoreManager.saveData(
+                            stringPreferencesKey("p7"),
+                            p7l
+                        )
+                    }
+                },
+                label = ({ Text("Period 7") })
+
+            )
+            Spacer(
+                Modifier.width(8.dp)
+            )
+            /*Switch(
+                checked = p7e,
+                onCheckedChange = { p7e = it }
+            )*/
+        }
     }
 
     }
