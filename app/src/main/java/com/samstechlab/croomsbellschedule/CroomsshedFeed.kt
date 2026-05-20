@@ -36,7 +36,7 @@ data class FeedItem(
     val delete: String,
     val createdBy: String? = null,
     val uid: String? = null,
-    val verified: Boolean
+    val verified: Boolean = false
 )
 
 /**
