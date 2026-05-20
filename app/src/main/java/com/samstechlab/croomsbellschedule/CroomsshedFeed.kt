@@ -36,7 +36,7 @@ data class FeedItem(
     val delete: String,
     val createdBy: String? = null,
     val uid: String? = null,
-    val verified: Boolean
+    val verified: Boolean = false
 )
 
 /**
@@ -46,7 +46,7 @@ suspend fun getFeedApiResponseString(): String? {
     return withContext(Dispatchers.IO) {
         val client = OkHttpClient()
         val request = Request.Builder()
-            .url("https://api.croomssched.tech/feed") // Centralized URL
+            .url("https://api.croomssched.tech/feed?limit=25") // Centralized URL
             .build()
 
         try {
