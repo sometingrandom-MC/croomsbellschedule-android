@@ -47,7 +47,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.lerp
@@ -136,32 +135,54 @@ fun ScrollContent(innerPadding: PaddingValues) {
         )
 
         val myDataStoreManager = MyDataStoreManager(context)
+        var lunchIndex by remember { mutableIntStateOf(0) }
+        var altlunchIndex by remember { mutableIntStateOf(0) }
 
-        val lunchPreferenceStr by myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).collectAsState(initial = "0")
-        var lunchIndex by remember(lunchPreferenceStr) {
-            mutableIntStateOf(if (lunchPreferenceStr == "Lunch A") 0 else 1)
+        val p = Array(8) { "" }
+
+
+
+        var lunchselectedIndexStr: String
+        var altlunchselectedIndexStr: String
+
+        runBlocking {
+            val lunchPreference =
+                myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).first()
+                    ?: 0
+            lunchselectedIndexStr = lunchPreference.toString()
+            lunchIndex = if (lunchselectedIndexStr == "Lunch A")
+                0
+            else
+                1
         }
 
-        val altLunchPreferenceStr by myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).collectAsState(initial = "0")
-        var altlunchIndex by remember(altLunchPreferenceStr) {
-            mutableIntStateOf(if (altLunchPreferenceStr == "Lunch A") 0 else 1)
+        runBlocking {
+            val altLunchPreference =
+                myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).first()
+                    ?: 0
+            altlunchselectedIndexStr = altLunchPreference.toString()
+            altlunchIndex = if (altlunchselectedIndexStr == "Lunch A")
+                0
+            else
+                1
         }
 
-        val p1 by myDataStoreManager.getData(stringPreferencesKey("p1")).collectAsState(initial = "Period 1")
-        val p2 by myDataStoreManager.getData(stringPreferencesKey("p2")).collectAsState(initial = "Period 2")
-        val p3 by myDataStoreManager.getData(stringPreferencesKey("p3")).collectAsState(initial = "Period 3")
-        val p4 by myDataStoreManager.getData(stringPreferencesKey("p4")).collectAsState(initial = "Period 4")
-        val p5 by myDataStoreManager.getData(stringPreferencesKey("p5")).collectAsState(initial = "Period 5")
-        val p6 by myDataStoreManager.getData(stringPreferencesKey("p6")).collectAsState(initial = "Period 6")
-        val p7 by myDataStoreManager.getData(stringPreferencesKey("p7")).collectAsState(initial = "Period 7")
 
-        var p1l by remember(p1) { mutableStateOf((if (p1 != "Period 1") p1 ?: "" else "")) }
-        var p2l by remember(p2) { mutableStateOf((if (p2 != "Period 2") p2 ?: "" else "")) }
-        var p3l by remember(p3) { mutableStateOf((if (p3 != "Period 3") p3 ?: "" else "")) }
-        var p4l by remember(p4) { mutableStateOf((if (p4 != "Period 4") p4 ?: "" else "")) }
-        var p5l by remember(p5) { mutableStateOf((if (p5 != "Period 5") p5 ?: "" else "")) }
-        var p6l by remember(p6) { mutableStateOf((if (p6 != "Period 6") p6 ?: "" else "")) }
-        var p7l by remember(p7) { mutableStateOf((if (p7 != "Period 7") p7 ?: "" else "")) }
+
+
+        runBlocking {
+            for (i in 1..7) {
+                p[i] =
+                    myDataStoreManager.getData(stringPreferencesKey("p$i")).first() ?: "Period $i"
+            }
+        }
+        var p1l by remember { mutableStateOf((if (p[1]!= "Period 1") p[1] else "")) }
+        var p2l by remember { mutableStateOf((if (p[2] != "Period 2") p[2] else "")) }
+        var p3l by remember { mutableStateOf((if (p[3] != "Period 3") p[3] else "")) }
+        var p4l by remember { mutableStateOf((if (p[4] != "Period 4") p[4] else "")) }
+        var p5l by remember { mutableStateOf((if (p[5] != "Period 5") p[5] else "")) }
+        var p6l by remember { mutableStateOf((if (p[6] != "Period 6") p[6] else "")) }
+        var p7l by remember { mutableStateOf((if (p[7] != "Period 7") p[7] else "")) }
 
         var p1e by remember { mutableStateOf(true) }
         var p2e by remember { mutableStateOf(true) }
