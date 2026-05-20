@@ -170,19 +170,15 @@ object ScheduleFetcher {
         val myDataStoreManager = MyDataStoreManager(context)
         var lunch: String
         if (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.WEDNESDAY) {
-            runBlocking {
-                val lunchPreference =
-                    myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).first()
-                        ?: "Lunch A"
-                lunch = lunchPreference
-            }
+            val lunchPreference =
+                myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).first()
+                    ?: "Lunch A"
+            lunch = lunchPreference
         } else {
-            runBlocking {
-                val lunchPreference =
-                    myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).first()
-                        ?: "Lunch A"
-                lunch = lunchPreference
-            }
+            val lunchPreference =
+                myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).first()
+                    ?: "Lunch A"
+            lunch = lunchPreference
         }
 
 
@@ -196,6 +192,11 @@ object ScheduleFetcher {
         for (block in todaySchedule) {
             val now = LocalTime.now()
             val eventEnd = LocalTime.of(block.endHour, block.endMinute)
+
+            if (now.isAfter(eventEnd)) {
+                continue
+            }
+
             val eventId = block.eventId
             var processedEventId: String
 
@@ -229,9 +230,6 @@ object ScheduleFetcher {
                 processedEventId = "Unknown Event";
             }
 
-            if (now.isAfter(eventEnd)) {
-                continue
-            }
             return listOf(processedEventId, lunchInt)
 
         }
