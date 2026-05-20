@@ -284,18 +284,16 @@ suspend fun afterSchoolQuips(context: Context): String {
 
 
 // Countdown timer logic
-fun countdown(schedule: List<List<ScheduleBlock>>, processedEventId: String, lunchInt: Int, context: Context): String {
+suspend fun countdown(schedule: List<List<ScheduleBlock>>, processedEventId: String, lunchInt: Int, context: Context): String {
     val myDataStoreManager = MyDataStoreManager(context)
-    val afterSchoolQuip = runBlocking {
+    val afterSchoolQuip =
         if (processedEventId == "After School" || processedEventId == "Nothing")
-            return@runBlocking afterSchoolQuips(context)
+            afterSchoolQuips(context)
         else
-            return@runBlocking null
-    }
+            null
+
     if (afterSchoolQuip != null){
-        runBlocking {
-            myDataStoreManager.saveData(stringPreferencesKey("AFTER_SCHOOL"), "true")
-        }
+        myDataStoreManager.saveData(stringPreferencesKey("AFTER_SCHOOL"), "true")
         return afterSchoolQuip
     }
 
