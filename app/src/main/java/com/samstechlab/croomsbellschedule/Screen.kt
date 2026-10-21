@@ -1,7 +1,7 @@
 package com.samstechlab.croomsbellschedule
 
-sealed class Screen (val route: String) {
-    object Home: Screen(route = "Home")
-    object Countdowns: Screen(route = "Feed")
-    object Settings: Screen(route = "Settings")
+sealed class Screen(val route: String) {
+    data object Home : Screen(route = "Home")
+    data object Countdowns : Screen(route = "Feed")
+    data object Settings : Screen(route = "Settings")
 }

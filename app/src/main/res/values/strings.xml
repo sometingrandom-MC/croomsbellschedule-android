@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">croomsbellschedule</string>
+    <string name="app_name">Crooms Bell Schedule</string>
+    <string name="widget_description">Live period countdown and schedule status for Crooms AOIT</string>
 </resources>

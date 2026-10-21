@@ -1,194 +1,481 @@
 package com.samstechlab.croomsbellschedule
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.PriorityHigh
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Verified
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.lerp as colorLerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
-import kotlinx.coroutines.runBlocking
-import androidx.compose.ui.graphics.lerp as colorLerp // Alias for color lerp
-import androidx.compose.ui.unit.lerp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import com.samstechlab.croomsbellschedule.CroomsshedFeed
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.samstechlab.compose.AppTheme
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun FeedScreen() {
+fun FeedScreen(
+    viewModel: MainViewModel = viewModel(),
+    bottomNavPadding: PaddingValues = PaddingValues(0.dp)
+) {
+    val feedState by viewModel.feedUiState.collectAsStateWithLifecycle()
+    val hapticFeedback = LocalHapticFeedback.current
+    val scrollBehavior =
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    LaunchedEffect(Unit) {
+        viewModel.markFeedSeen()
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             val collapsedFraction = scrollBehavior.state.collapsedFraction
-
-            // Smoothly interpolate color
             val interpolatedContainerColor = colorLerp(
                 start = MaterialTheme.colorScheme.background,
                 stop = MaterialTheme.colorScheme.surfaceContainer,
                 fraction = collapsedFraction
             )
-
-            // Smoothly interpolate font size
             val interpolatedFontSize = lerp(
                 start = MaterialTheme.typography.headlineLarge.fontSize,
                 stop = MaterialTheme.typography.titleLarge.fontSize,
                 fraction = collapsedFraction
             )
-            MediumFlexibleTopAppBar(
 
+            MediumFlexibleTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = interpolatedContainerColor,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
                 title = {
-
                     Text(
-                        "Feed",
+                        text = "Announcements",
                         fontSize = interpolatedFontSize,
+                        fontFamily = MaterialTheme.typography.headlineLarge.fontFamily,
+                        fontWeight = MaterialTheme.typography.headlineLarge.fontWeight,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 },
-
-                scrollBehavior = scrollBehavior
-            )
-        },
-    ) { innerPadding ->
-        ScrollContentCountdowns(innerPadding)
-    }
-
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun ScrollContentCountdowns(innerPadding: PaddingValues) {
-    // remember the instance of CroomsshedFeed
-    val feedManager = remember { CroomsshedFeed() }
-    val context = LocalContext.current
-
-    // State to hold the list of messages
-    var messagesList by remember { mutableStateOf<List<String>?>(null) }
-    // State to hold any error message from fetching/parsing
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    // State to hold the status message (e.g., "Fetched from cache X minutes ago")
-    var fetchStatusMessage by remember { mutableStateOf<String?>(null) }
-    // State to track loading status
-    var isLoading by remember { mutableStateOf(true) }
-
-    // Use LaunchedEffect to fetch data when the composable enters the composition
-    // It will re-launch if feedManager or context change, though they are stable here.
-    LaunchedEffect(key1 = Unit) { // key1 = Unit ensures it runs once on composition
-        isLoading = true
-        errorMessage = null
-        messagesList = null
-        fetchStatusMessage = null
-        println("LaunchedEffect: Starting to fetch feed messages...")
-
-        try {
-            // fetchAndGetFeedMessages is a suspend function and handles Dispatchers.IO internally
-            val (result, statusMsg, statusCode) = feedManager.fetchAndGetFeedMessages(context, refresh = false) // Set refresh to true to bypass cache
-
-            fetchStatusMessage = statusMsg // Store the status message
-
-            result.fold(
-                onSuccess = { fetchedMessages ->
-                    println("LaunchedEffect: Successfully fetched messages. Count: ${fetchedMessages.size}")
-                    messagesList = fetchedMessages
-                    if (fetchedMessages.isEmpty()) {
-                        errorMessage = "No messages found in the feed."
+                actions = {
+                    FilledTonalIconButton(
+                        onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.loadFeed(refresh = true)
+                        },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = "Refresh Announcements"
+                        )
                     }
                 },
-                onFailure = { exception ->
-                    println("LaunchedEffect: Error fetching messages: ${exception.message}")
-                    errorMessage = "Error: ${exception.message ?: "Unknown error"}"
-                }
+                scrollBehavior = scrollBehavior
             )
-        } catch (e: Exception) {
-            // This catch block is for unexpected errors during the LaunchedEffect itself,
-            // though fetchAndGetFeedMessages should ideally encapsulate its errors in the Result.
-            println("LaunchedEffect: Uncaught exception: ${e.message}")
-            errorMessage = "An unexpected error occurred: ${e.message}"
-        } finally {
-            isLoading = false
-            println("LaunchedEffect: Fetching complete. isLoading: $isLoading")
         }
+    ) { innerPadding ->
+        FeedContent(
+            uiState = feedState,
+            innerPadding = innerPadding,
+            bottomNavPadding = bottomNavPadding,
+            onRefresh = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.loadFeed(refresh = true)
+            }
+        )
     }
+}
 
-    Box(
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun FeedContent(
+    uiState: FeedUiState,
+    innerPadding: PaddingValues,
+    bottomNavPadding: PaddingValues = PaddingValues(0.dp),
+    onRefresh: () -> Unit
+) {
+    val pullToRefreshState = rememberPullToRefreshState()
+
+    PullToRefreshBox(
         modifier = Modifier
             .fillMaxSize()
-            .padding(innerPadding), // Apply innerPadding to the Box
-        contentAlignment = Alignment.Center
+            .padding(innerPadding),
+        state = pullToRefreshState,
+        isRefreshing = uiState.isRefreshing,
+        onRefresh = onRefresh,
+        indicator = {
+            PullToRefreshDefaults.LoadingIndicator(
+                state = pullToRefreshState,
+                isRefreshing = uiState.isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
     ) {
-        if (isLoading) {
-            LoadingIndicator()
-        } else {
-            // Use a local variable for smart casting and null check
-            val currentMessages = messagesList
-            if (currentMessages != null && currentMessages.isNotEmpty()) {
-                // Display the fetched messages in a LazyColumn
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize() // LazyColumn should fill the Box
-                        .padding(horizontal = 8.dp) // Add some padding for the list items
+        when {
+            uiState.isLoading && uiState.items.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // You can also display the fetchStatusMessage if desired
-                    // item { Text(text = fetchStatusMessage ?: "Checking feed...") }
-
-                    items(count = currentMessages.size) { message -> // Use the smart-casted non-null list
-                        ElevatedCard(Modifier.padding(vertical = 4.dp)){
-                            Text(
-                                text = currentMessages[message],
-
-                                modifier = Modifier.padding(vertical = 5.dp, horizontal = 10.dp)
-                            )
-                        }
-
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        LoadingIndicator(modifier = Modifier.size(56.dp))
+                        Text(
+                            text = "Loading Crooms announcements…",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-            } else {
-                // Display an error message or "No data available"
-                Text(text = errorMessage ?: "No messages available or failed to load.")
+            }
+
+            uiState.items.isNotEmpty() -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 112.dp + bottomNavPadding.calculateBottomPadding()
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item(key = "feed_status_header") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val isOnline = uiState.statusCode == 1
+                            AssistChip(
+                                onClick = onRefresh,
+                                label = {
+                                    Text(
+                                        text = uiState.statusMessage,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (isOnline) Icons.Rounded.Refresh else Icons.Rounded.CloudOff,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = if (!isOnline) {
+                                    AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        labelColor = MaterialTheme.colorScheme.onErrorContainer,
+                                        leadingIconContentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                } else {
+                                    AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        leadingIconContentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                },
+                                shape = CircleShape,
+                                border = BorderStroke(0.dp, MaterialTheme.colorScheme.surfaceContainerHigh)
+                            )
+
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                shape = CircleShape
+                            ) {
+                                Text(
+                                    text = "${uiState.items.size} updates",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    itemsIndexed(
+                        items = uiState.items,
+                        key = { index, item -> item.id.ifBlank { "feed_item_$index" } }
+                    ) { _, item ->
+                        FeedAnnouncementCard(item = item)
+                    }
+                }
+            }
+
+            else -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Forum,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                text = "No Announcements Found",
+                                style = MaterialTheme.typography.titleLarge,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = uiState.errorMessage
+                                    ?: "Check back later for school updates and announcements.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            FilledTonalButton(
+                                onClick = onRefresh,
+                                modifier = Modifier.padding(top = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Try Again")
+                            }
+                        }
+                    }
+                }
             }
         }
-        // Optionally, display the fetchStatusMessage somewhere, e.g., at the bottom
-        // if (fetchStatusMessage != null && !isLoading) {
-        //     Text(
-        //         text = fetchStatusMessage!!,
-        //         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
-        //     )
-        // }
+    }
+}
+
+@Composable
+private fun FeedAnnouncementCard(item: FeedItem) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                if (item.priority) {
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Campaign,
+                            contentDescription = null,
+                            tint = if (item.priority) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.title.ifBlank { item.authorDisplayName },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            val formattedTime = item.formattedTimestamp()
+                            if (formattedTime.isNotBlank()) {
+                                Text(
+                                    text = formattedTime,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (item.verified) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Verified,
+                                    contentDescription = "Verified",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (item.priority) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                    shape = CircleShape
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.PriorityHigh,
+                                            contentDescription = "Priority Announcement",
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "Priority",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            )
+
+            SelectionContainer {
+                Text(
+                    text = item.data,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@Preview(showBackground = true)
+fun FeedScreenPreview() {
+    AppTheme {
+        FeedContent(
+            uiState = FeedUiState(
+                isLoading = false,
+                items = listOf(
+                    FeedItem(
+                        id = "1",
+                        title = "Website Update v5.1.0",
+                        data = "The Crooms Bell Schedule website has been updated to give you the latest and greatest of what our devs have to offer.\n• Added ability to mark announcements as read\n• Add schedule table",
+                        createdBy = "Crooms Bell Schedule Team",
+                        create = "2026-09-08T01:56:20.999Z",
+                        verified = true,
+                        priority = true
+                    ),
+                    FeedItem(
+                        id = "2",
+                        title = "Multi-factor Authentication",
+                        data = "Multi-factor Authentication is now available for Crooms Bell Schedule accounts.",
+                        createdBy = "Crooms Bell Schedule Team",
+                        create = "2026-04-02T17:30:18.612Z",
+                        verified = true,
+                        priority = false
+                    )
+                ),
+                statusMessage = "Updated just now",
+                statusCode = 1
+            ),
+            innerPadding = PaddingValues(0.dp),
+            onRefresh = {}
+        )
     }
 }

@@ -2,6 +2,7 @@ package com.samstechlab.croomsbellschedule
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.system.measureTimeMillis
@@ -10,7 +11,7 @@ import kotlin.system.measureTimeMillis
 class CroomsshedTimerBenchmark {
 
     @Test
-    fun benchmarkCountdown() {
+    fun benchmarkCountdown() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val schedule = listOf(
             listOf(ScheduleBlock(0, 0, 105, 23, 59))

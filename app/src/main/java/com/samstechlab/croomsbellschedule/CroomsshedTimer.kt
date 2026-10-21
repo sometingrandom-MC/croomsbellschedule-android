@@ -1,6 +1,7 @@
 package com.samstechlab.croomsbellschedule
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -14,132 +15,358 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
+import org.json.JSONObject
 import java.io.IOException
+import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.util.Calendar
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "my_preferences")
-private val CACHED_SCHEDULE_KEY = stringPreferencesKey("cached_schedule")
-private val CACHE_TIMESTAMP_KEY = stringPreferencesKey("cache_timestamp")
+val Context.appDataStore: DataStore<Preferences> by preferencesDataStore(name = "my_preferences")
 
-class MyDataStoreManager(private val context: Context) {
+private val CACHED_SCHEDULE_KEY = stringPreferencesKey("cached_schedule_v2")
+private val CACHE_TIMESTAMP_KEY = stringPreferencesKey("cache_timestamp_v2")
+private val CACHED_QUIP_KEY = stringPreferencesKey("CACHED_QUIP_KEY")
+private val CACHE_QUIP_TIMESTAMP_KEY = stringPreferencesKey("CACHE_QUIP_TIMESTAMP_KEY")
+private val AFTER_SCHOOL_KEY = stringPreferencesKey("AFTER_SCHOOL")
 
-    // You can now access the DataStore instance using 'context.dataStore'
+/**
+ * Shared singleton OkHttpClient to reuse connection pools, thread pools, and TLS sessions.
+ */
+object NetworkClient {
+    val httpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+}
+
+@Immutable
+data class UserPreferencesSnapshot(
+    val lunchPreference: String = "Lunch A",
+    val altLunchPreference: String = "Lunch A",
+    val periodNames: Map<Int, String> = emptyMap()
+) {
+    fun getPeriodLabel(periodNumber: Int): String {
+        val custom = periodNames[periodNumber]?.trim()
+        val defaultName = if (periodNumber == 8) "Homeroom" else "Period $periodNumber"
+        return if (!custom.isNullOrEmpty()) custom else defaultName
+    }
+}
+
+/**
+ * Optimized DataStore manager with an in-memory cache layer so repeated reads do not hit disk.
+ */
+class MyDataStoreManager(context: Context) {
+    private val appContext = context.applicationContext
+
+    val preferencesFlow: Flow<UserPreferencesSnapshot> = appContext.appDataStore.data.map { prefs ->
+        prefs.asMap().forEach { (k, v) ->
+            if (v is String) {
+                memoryCache[k.name] = v
+            }
+        }
+        UserPreferencesSnapshot(
+            lunchPreference = prefs[PreferenceKeys.LUNCH_PREF] ?: "Lunch A",
+            altLunchPreference = prefs[PreferenceKeys.ALT_LUNCH_PREF] ?: "Lunch A",
+            periodNames = (1..8).associateWith { i ->
+                prefs[PreferenceKeys.periodKey(i)] ?: ""
+            }
+        )
+    }
+
     suspend fun saveData(key: Preferences.Key<String>, value: String) {
-        context.dataStore.edit { preferences ->
+        if (memoryCache[key.name] == value) return
+        memoryCache[key.name] = value
+        appContext.appDataStore.edit { preferences ->
             preferences[key] = value
         }
     }
 
     fun getData(key: Preferences.Key<String>): Flow<String?> {
-        return context.dataStore.data.map { preferences ->
-            preferences[key]
+        return appContext.appDataStore.data.map { preferences ->
+            val value = preferences[key]
+            if (value != null) {
+                memoryCache[key.name] = value
+            }
+            value
         }
+    }
+
+    suspend fun getCachedOrRead(key: Preferences.Key<String>): String? {
+        memoryCache[key.name]?.let { return it }
+        val prefs = appContext.appDataStore.data.first()
+        prefs.asMap().forEach { (k, v) ->
+            if (v is String) memoryCache[k.name] = v
+        }
+        return prefs[key]
+    }
+
+    suspend fun getSnapshot(): UserPreferencesSnapshot {
+        val prefs = appContext.appDataStore.data.first()
+        prefs.asMap().forEach { (k, v) ->
+            if (v is String) memoryCache[k.name] = v
+        }
+        return UserPreferencesSnapshot(
+            lunchPreference = prefs[PreferenceKeys.LUNCH_PREF] ?: "Lunch A",
+            altLunchPreference = prefs[PreferenceKeys.ALT_LUNCH_PREF] ?: "Lunch A",
+            periodNames = (1..8).associateWith { i ->
+                prefs[PreferenceKeys.periodKey(i)] ?: ""
+            }
+        )
+    }
+
+    companion object {
+        private val memoryCache = ConcurrentHashMap<String, String>()
     }
 }
 
+object PreferenceKeys {
+    val LUNCH_PREF = stringPreferencesKey("lunch_preference")
+    val ALT_LUNCH_PREF = stringPreferencesKey("alt_lunch_preference")
+    private val PERIOD_KEYS = (1..8).associateWith { stringPreferencesKey("p$it") }
 
+    fun periodKey(period: Int): Preferences.Key<String> =
+        PERIOD_KEYS[period] ?: stringPreferencesKey("p$period")
+}
+
+private val TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+
+@Immutable
 data class ScheduleBlock(
     val startHour: Int,
     val startMinute: Int,
     val eventId: Int,
     val endHour: Int,
     val endMinute: Int
+) {
+    val startTime: LocalTime
+        get() = LocalTime.of(startHour.coerceIn(0, 23), startMinute.coerceIn(0, 59))
+
+    val endTime: LocalTime
+        get() = LocalTime.of(endHour.coerceIn(0, 23), endMinute.coerceIn(0, 59))
+
+    val durationMinutes: Long
+        get() = ChronoUnit.MINUTES.between(startTime, endTime).coerceAtLeast(0L)
+
+    fun formattedTimeRange(): String =
+        "${startTime.format(TIME_FORMATTER)} – ${endTime.format(TIME_FORMATTER)}"
+}
+
+enum class PeriodState {
+    COMPLETED,
+    CURRENT,
+    UPCOMING
+}
+
+@Immutable
+data class ResolvedSchedulePeriod(
+    val block: ScheduleBlock,
+    val label: String,
+    val defaultLabel: String,
+    val formattedTimeRange: String,
+    val durationMinutes: Long,
+    val state: PeriodState,
+    val progress: Float
 )
 
-suspend fun getApiResponse(): String? {
-    return withContext(Dispatchers.IO) {
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("https://api.croomssched.tech/today")
-            .build()
+@Immutable
+data class ScheduleEvaluation(
+    val headlineTitle: String,
+    val countdownClock: String,
+    val subtitleText: String,
+    val currentProgress: Float,
+    val dayProgress: Float,
+    val isSchoolDayActive: Boolean,
+    val isPassingPeriod: Boolean,
+    val selectedLunchLabel: String,
+    val isWednesday: Boolean,
+    val scheduleDayTitle: String,
+    val periods: List<ResolvedSchedulePeriod>
+)
 
-        try {
-            val response: Response = client.newCall(request).execute()
+suspend fun getApiResponse(): String? = withContext(Dispatchers.IO) {
+    val request = Request.Builder()
+        .url("https://api.croomsbellschedule.com/today")
+        .header("Accept", "application/json")
+        .build()
+
+    try {
+        NetworkClient.httpClient.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
                 response.body?.string()
             } else {
-                // Handle unsuccessful response (e.g., 404, 500)
-                println("API request failed with code: ${response.code}")
                 null
             }
-        } catch (e: IOException) {
-            // Handle network or other exceptions
-            println("Error during API request: ${e.message}")
-            null
         }
+    } catch (_: IOException) {
+        null
     }
 }
-// Use the ScheduleFetcher to dynamically fetch today's schedule
+
 object ScheduleFetcher {
-    private const val CACHE_DURATION_HOURS = 1L
+    private const val CACHE_DURATION_MINUTES = 60L
 
-    suspend fun fetchAndParseSchedule(context: Context, refresh: Boolean = false): Triple<Result<List<List<ScheduleBlock>>>, String, Int> =
+    @Volatile
+    private var inMemorySchedule: List<List<ScheduleBlock>>? = null
 
-        withContext(Dispatchers.IO) {
-            try {
-                val myDataStoreManager = MyDataStoreManager(context)
-                val connection: String
-                val status: Int
-                // Try to get cached data
-                val cachedSchedule = myDataStoreManager.getData(CACHED_SCHEDULE_KEY).first()
-                val cachedTimestamp = myDataStoreManager.getData(CACHE_TIMESTAMP_KEY).first()
-                var minutesSinceCache: Long
+    @Volatile
+    private var inMemoryDayName: String = "Today's Schedule"
 
-                // Check if cache is valid
-                if (cachedSchedule != null && cachedTimestamp != null) {
-                    val timestamp = Instant.parse(cachedTimestamp)
-                    val now = Instant.now()
-                    val hoursSinceCache = ChronoUnit.HOURS.between(timestamp, now)
-                    minutesSinceCache = ChronoUnit.MINUTES.between(timestamp, now)
+    @Volatile
+    private var inMemoryTimestamp: Instant? = null
 
+    fun getScheduleDayTitle(): String = inMemoryDayName
 
-                    if (hoursSinceCache < CACHE_DURATION_HOURS && !refresh) {
-                        // Use cached data if it's less than 1 hour old
-                        status = 1
-                        connection = "Fetched $minutesSinceCache minutes ago"
-                        return@withContext Triple(parseScheduleFromJson(cachedSchedule), connection, status)
-                    }
+    fun defaultEventLabel(eventId: Int): String = when (eventId) {
+        in 1..7 -> "Period $eventId"
+        8 -> "Homeroom"
+        0 -> "No School"
+        100 -> "Morning"
+        101 -> "Welcome"
+        102 -> "Lunch"
+        103 -> "Homeroom"
+        104 -> "Dismissal"
+        105 -> "After School"
+        106 -> "End of Day"
+        107 -> "Break"
+        110 -> "PSAT / SAT"
+        111 -> "Session 1"
+        112 -> "Session 2"
+        113 -> "Session 3"
+        114 -> "Session 5"
+        115 -> "Field Day"
+        116 -> "Testing"
+        else -> "Special Event"
+    }
+
+    fun resolveEventLabel(eventId: Int, prefs: UserPreferencesSnapshot): String = when (eventId) {
+        in 1..8 -> prefs.getPeriodLabel(eventId)
+        0 -> "Nothing"
+        100 -> "Morning"
+        101 -> "Welcome"
+        102 -> "Lunch"
+        103 -> "Homeroom"
+        104 -> "Dismissal"
+        105 -> "After School"
+        106 -> "End"
+        107 -> "Break"
+        110 -> "PSAT/SAT"
+        111 -> "Session 1"
+        112 -> "Session 2"
+        113 -> "Session 3"
+        114 -> "Session 5"
+        115 -> "Field Day"
+        116 -> "Testing"
+        else -> "Unknown Event"
+    }
+
+    suspend fun fetchAndParseSchedule(
+        context: Context,
+        refresh: Boolean = false
+    ): Triple<Result<List<List<ScheduleBlock>>>, String, Int> = withContext(Dispatchers.IO) {
+        try {
+            val now = Instant.now()
+            val memSchedule = inMemorySchedule
+            val memTime = inMemoryTimestamp
+
+            if (!refresh && memSchedule != null && memTime != null) {
+                val mins = ChronoUnit.MINUTES.between(memTime, now).coerceAtLeast(0L)
+                if (mins < CACHE_DURATION_MINUTES) {
+                    val msg = if (mins == 0L) "Updated just now" else "Fetched $mins min ago"
+                    return@withContext Triple(Result.success(memSchedule), msg, 1)
                 }
-
-                // If cache is invalid or missing, fetch new data
-                val response = getApiResponse()
-                if (response != null) {
-                    // Save new data to cache
-                    myDataStoreManager.saveData(CACHED_SCHEDULE_KEY, response)
-                    myDataStoreManager.saveData(CACHE_TIMESTAMP_KEY, Instant.now().toString())
-                    minutesSinceCache = ChronoUnit.MINUTES.between(Instant.parse(Instant.now().toString()), Instant.parse(Instant.now().toString()))
-                    status = 1
-                    connection = "Fetched $minutesSinceCache minutes ago"
-                    return@withContext Triple(parseScheduleFromJson(response), connection, status)
-                } else {
-                    // If API call fails but we have cached data, use it as fallback
-                    if (cachedSchedule != null) {
-                        minutesSinceCache = ChronoUnit.MINUTES.between(Instant.parse(cachedTimestamp), Instant.now())
-                        connection = "Cannot update schedule, using data from $minutesSinceCache minutes ago"
-                        status = 0
-                        return@withContext Triple(parseScheduleFromJson(cachedSchedule), connection, status)
-                    }
-                    throw IOException("Failed to fetch schedule and no cache available")
-                }
-            } catch (e: Exception) {
-                return@withContext Triple(Result.failure(e), "Cannot fetch data", 0)
             }
+
+            val myDataStoreManager = MyDataStoreManager(context)
+            val cachedSchedule = myDataStoreManager.getCachedOrRead(CACHED_SCHEDULE_KEY)
+            val cachedTimestamp = myDataStoreManager.getCachedOrRead(CACHE_TIMESTAMP_KEY)
+
+            if (!refresh && cachedSchedule != null && cachedTimestamp != null) {
+                val timestamp = runCatching { Instant.parse(cachedTimestamp) }.getOrNull()
+                if (timestamp != null) {
+                    val minutesSinceCache = ChronoUnit.MINUTES.between(timestamp, now).coerceAtLeast(0L)
+                    if (minutesSinceCache < CACHE_DURATION_MINUTES) {
+                        val parsed = parseScheduleFromJson(cachedSchedule)
+                        if (parsed.isSuccess) {
+                            inMemorySchedule = parsed.getOrNull()
+                            inMemoryTimestamp = timestamp
+                        }
+                        val connection = if (minutesSinceCache == 0L) {
+                            "Updated just now"
+                        } else {
+                            "Fetched $minutesSinceCache min ago"
+                        }
+                        return@withContext Triple(parsed, connection, 1)
+                    }
+                }
+            }
+
+            val response = getApiResponse()
+            if (response != null) {
+                val parsed = parseScheduleFromJson(response)
+                if (parsed.isSuccess) {
+                    val currentInstant = Instant.now()
+                    inMemorySchedule = parsed.getOrNull()
+                    inMemoryTimestamp = currentInstant
+                    myDataStoreManager.saveData(CACHED_SCHEDULE_KEY, response)
+                    myDataStoreManager.saveData(CACHE_TIMESTAMP_KEY, currentInstant.toString())
+                    return@withContext Triple(parsed, "Updated just now", 1)
+                }
+            }
+
+            if (cachedSchedule != null) {
+                val timestamp = runCatching { Instant.parse(cachedTimestamp) }.getOrNull() ?: now
+                val minutesSinceCache = ChronoUnit.MINUTES.between(timestamp, now).coerceAtLeast(0L)
+                val parsed = parseScheduleFromJson(cachedSchedule)
+                if (parsed.isSuccess) {
+                    inMemorySchedule = parsed.getOrNull()
+                    inMemoryTimestamp = timestamp
+                }
+                val connection = "Offline • Cached ${minutesSinceCache}m ago"
+                return@withContext Triple(parsed, connection, 0)
+            }
+
+            val fallback = FallbackScheduleProvider.getTodayFallbackSchedule()
+            inMemorySchedule = fallback
+            inMemoryTimestamp = now
+            return@withContext Triple(
+                Result.success(fallback),
+                "Offline • Using standard bell schedule",
+                0
+            )
+        } catch (e: Exception) {
+            return@withContext Triple(Result.failure(e), "Cannot fetch schedule", 0)
         }
+    }
 
     fun parseScheduleFromJson(jsonString: String): Result<List<List<ScheduleBlock>>> {
         return try {
-            val json = org.json.JSONObject(jsonString)
+            val json = JSONObject(jsonString)
             val data = json.getJSONObject("data")
+            val dayName = data.optString("msg", "").ifBlank {
+                data.optString("name", "").ifBlank {
+                    data.optString("id", "Today's Schedule")
+                }
+            }
+            if (dayName.isNotBlank()) {
+                inMemoryDayName = dayName
+            }
             val scheduleJson = data.getJSONArray("schedule")
-            val schedule = mutableListOf<List<ScheduleBlock>>()
+            val schedule = ArrayList<List<ScheduleBlock>>(scheduleJson.length())
 
             for (i in 0 until scheduleJson.length()) {
                 val daySchedule = scheduleJson.getJSONArray(i)
-                val blocks = mutableListOf<ScheduleBlock>()
+                val blocks = ArrayList<ScheduleBlock>(daySchedule.length())
 
                 for (j in 0 until daySchedule.length()) {
                     val block = daySchedule.getJSONArray(j)
@@ -162,227 +389,315 @@ object ScheduleFetcher {
         }
     }
 
+    /**
+     * Pure, zero-I/O evaluation of the current schedule state for smooth 1-second UI updates.
+     */
+    fun evaluateSchedule(
+        schedule: List<List<ScheduleBlock>>,
+        prefs: UserPreferencesSnapshot,
+        now: LocalTime = LocalTime.now(),
+        today: LocalDate = LocalDate.now(),
+        afterSchoolQuip: String = defaultQuip()
+    ): ScheduleEvaluation {
+        val isWednesday = today.dayOfWeek == DayOfWeek.WEDNESDAY
+        val selectedLunch = if (isWednesday) prefs.altLunchPreference else prefs.lunchPreference
+        val lunchIndex = if (selectedLunch == "Lunch A") 0 else 1
+
+        val rawBlocks = schedule.getOrElse(lunchIndex) { schedule.firstOrNull().orEmpty() }
+        // Match croomsbellschedule.com schedule table filter: exclude 0, 100 (Morning), 101 (Welcome), 104 (Dismissal), 105 (After School), 106 (End)
+        val displayBlocks = rawBlocks.filter { it.eventId !in setOf(0, 100, 101, 104, 105, 106) }
+
+        val resolvedPeriods = displayBlocks.map { block ->
+            val start = block.startTime
+            val end = block.endTime
+            val state = when {
+                !now.isBefore(end) -> PeriodState.COMPLETED
+                !now.isBefore(start) && now.isBefore(end) -> PeriodState.CURRENT
+                else -> PeriodState.UPCOMING
+            }
+            val totalSeconds = ChronoUnit.SECONDS.between(start, end).coerceAtLeast(1L)
+            val elapsedSeconds = ChronoUnit.SECONDS.between(start, now).coerceIn(0L, totalSeconds)
+            val progress = when (state) {
+                PeriodState.COMPLETED -> 1f
+                PeriodState.CURRENT -> (elapsedSeconds.toFloat() / totalSeconds.toFloat()).coerceIn(0f, 1f)
+                PeriodState.UPCOMING -> 0f
+            }
+            val customLabel = resolveEventLabel(block.eventId, prefs)
+            val defaultLabel = defaultEventLabel(block.eventId)
+            ResolvedSchedulePeriod(
+                block = block,
+                label = customLabel,
+                defaultLabel = defaultLabel,
+                formattedTimeRange = block.formattedTimeRange(),
+                durationMinutes = block.durationMinutes,
+                state = state,
+                progress = progress
+            )
+        }
+
+        // Compute overall school day progress
+        val dayProgress = if (displayBlocks.isNotEmpty()) {
+            val dayStart = displayBlocks.first().startTime
+            val dayEnd = displayBlocks.last().endTime
+            val totalDaySeconds = ChronoUnit.SECONDS.between(dayStart, dayEnd).coerceAtLeast(1L)
+            val elapsedDaySeconds = ChronoUnit.SECONDS.between(dayStart, now).coerceIn(0L, totalDaySeconds)
+            (elapsedDaySeconds.toFloat() / totalDaySeconds.toFloat()).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+
+        // Find active block in rawBlocks
+        for (i in rawBlocks.indices) {
+            val block = rawBlocks[i]
+            val start = block.startTime
+            val end = block.endTime
+            if (!now.isBefore(end)) continue
+
+            val eventLabel = resolveEventLabel(block.eventId, prefs)
+            if (block.eventId == 0 || block.eventId == 105 || block.eventId == 106) {
+                return ScheduleEvaluation(
+                    headlineTitle = if (block.eventId == 0) "No School Today" else "School's Out",
+                    countdownClock = "Done",
+                    subtitleText = afterSchoolQuip,
+                    currentProgress = 1f,
+                    dayProgress = 1f,
+                    isSchoolDayActive = false,
+                    isPassingPeriod = false,
+                    selectedLunchLabel = selectedLunch,
+                    isWednesday = isWednesday,
+                    scheduleDayTitle = inMemoryDayName,
+                    periods = resolvedPeriods
+                )
+            }
+
+            if (block.eventId == 100) {
+                // Morning block before Welcome/First Period: count down to the end of Morning (when school starts)
+                val nextEventBlock = rawBlocks.firstOrNull { it.eventId !in setOf(0, 100, 101) } ?: block
+                val targetStart = nextEventBlock.startTime
+                val nextLabel = resolveEventLabel(nextEventBlock.eventId, prefs)
+                val secondsUntilStart = ChronoUnit.SECONDS.between(now, targetStart).coerceAtLeast(0L)
+                return ScheduleEvaluation(
+                    headlineTitle = "Up Next: $nextLabel",
+                    countdownClock = formatDurationClock(secondsUntilStart),
+                    subtitleText = "School starts at ${targetStart.format(TIME_FORMATTER)}",
+                    currentProgress = 0f,
+                    dayProgress = 0f,
+                    isSchoolDayActive = true,
+                    isPassingPeriod = true,
+                    selectedLunchLabel = selectedLunch,
+                    isWednesday = isWednesday,
+                    scheduleDayTitle = inMemoryDayName,
+                    periods = resolvedPeriods
+                )
+            }
+
+            if (now.isBefore(start)) {
+                val secondsUntilStart = ChronoUnit.SECONDS.between(now, start).coerceAtLeast(0L)
+                val prevEnd = if (i > 0) rawBlocks[i - 1].endTime else start.minusMinutes(6)
+                val totalGap = ChronoUnit.SECONDS.between(prevEnd, start).coerceAtLeast(1L)
+                val elapsedGap = (totalGap - secondsUntilStart).coerceIn(0L, totalGap)
+                val gapProgress = (elapsedGap.toFloat() / totalGap.toFloat()).coerceIn(0f, 1f)
+
+                return ScheduleEvaluation(
+                    headlineTitle = "Up Next: $eventLabel",
+                    countdownClock = formatDurationClock(secondsUntilStart),
+                    subtitleText = "Starts at ${start.format(TIME_FORMATTER)}",
+                    currentProgress = gapProgress,
+                    dayProgress = dayProgress,
+                    isSchoolDayActive = true,
+                    isPassingPeriod = true,
+                    selectedLunchLabel = selectedLunch,
+                    isWednesday = isWednesday,
+                    scheduleDayTitle = inMemoryDayName,
+                    periods = resolvedPeriods
+                )
+            }
+
+            val secondsUntilEnd = ChronoUnit.SECONDS.between(now, end).coerceAtLeast(0L)
+            val totalDuration = ChronoUnit.SECONDS.between(start, end).coerceAtLeast(1L)
+            val elapsed = (totalDuration - secondsUntilEnd).coerceIn(0L, totalDuration)
+            val progress = (elapsed.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+
+            return ScheduleEvaluation(
+                headlineTitle = eventLabel,
+                countdownClock = formatDurationClock(secondsUntilEnd),
+                subtitleText = "Ends at ${end.format(TIME_FORMATTER)} • ${block.formattedTimeRange()}",
+                currentProgress = progress,
+                dayProgress = dayProgress,
+                isSchoolDayActive = true,
+                isPassingPeriod = false,
+                selectedLunchLabel = selectedLunch,
+                isWednesday = isWednesday,
+                scheduleDayTitle = inMemoryDayName,
+                periods = resolvedPeriods
+            )
+        }
+
+        return ScheduleEvaluation(
+            headlineTitle = "School's Out",
+            countdownClock = "Done",
+            subtitleText = afterSchoolQuip,
+            currentProgress = 1f,
+            dayProgress = 1f,
+            isSchoolDayActive = false,
+            isPassingPeriod = false,
+            selectedLunchLabel = selectedLunch,
+            isWednesday = isWednesday,
+            scheduleDayTitle = inMemoryDayName,
+            periods = resolvedPeriods
+        )
+    }
+
+    private fun formatDurationClock(totalSeconds: Long): String {
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format(Locale.US, "%dh %02dm %02ds", hours, minutes, seconds)
+        } else {
+            String.format(Locale.US, "%02dm %02ds", minutes, seconds)
+        }
+    }
+
     suspend fun fetchPeriodLabels(
         context: Context,
         schedule: List<List<ScheduleBlock>>
     ): List<Any> {
-        val calendar = Calendar.getInstance()
         val myDataStoreManager = MyDataStoreManager(context)
-        var lunch: String
-        if (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.WEDNESDAY) {
-            val lunchPreference =
-                myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).first()
-                    ?: "Lunch A"
-            lunch = lunchPreference
-        } else {
-            val lunchPreference =
-                myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).first()
-                    ?: "Lunch A"
-            lunch = lunchPreference
-        }
+        val snapshot = myDataStoreManager.getSnapshot()
+        val isWednesday = LocalDate.now().dayOfWeek == DayOfWeek.WEDNESDAY
+        val lunch = if (!isWednesday) snapshot.lunchPreference else snapshot.altLunchPreference
+        val lunchInt = if (lunch == "Lunch A") 0 else 1
 
-
-        val lunchInt: Int
-        lunchInt = if (lunch == "Lunch A")
-            0
-        else
-            1
-
-        val todaySchedule = schedule[lunchInt]
+        val todaySchedule = schedule.getOrElse(lunchInt) { schedule.firstOrNull().orEmpty() }
+        val now = LocalTime.now()
         for (block in todaySchedule) {
-            val now = LocalTime.now()
-            val eventEnd = LocalTime.of(block.endHour, block.endMinute)
-
-            if (now.isAfter(eventEnd)) {
-                continue
-            }
-
-            val eventId = block.eventId
-            var processedEventId: String
-
-            if (eventId == 1 || eventId == 2 || eventId == 3 || eventId == 4 || eventId == 5
-                || eventId == 6 || eventId == 7
-            ) {
-                processedEventId =
-                    myDataStoreManager.getData(stringPreferencesKey("p$eventId")).first()
-                        ?: "Period $eventId";
-            } else if (eventId == 0) {
-                processedEventId = "Nothing";
-            } else if (eventId == 100) {
-                processedEventId = "Morning";
-            } else if (eventId == 101) {
-                processedEventId = "Welcome";
-            } else if (eventId == 102) {
-                processedEventId = "Lunch";
-            } else if (eventId == 103) {
-                processedEventId = "Homeroom";
-            } else if (eventId == 104) {
-                processedEventId = "Dismissal";
-            } else if (eventId == 105) {
-                processedEventId = "After School";
-            } else if (eventId == 106) {
-                processedEventId = "End";
-            } else if (eventId == 107) {
-                processedEventId = "Break";
-            } else if (eventId == 110) {
-                processedEventId = "PSAT/SAT";
-            } else {
-                processedEventId = "Unknown Event";
-            }
-
+            val eventEnd = block.endTime
+            if (now.isAfter(eventEnd)) continue
+            val processedEventId = resolveEventLabel(block.eventId, snapshot)
             return listOf(processedEventId, lunchInt)
-
         }
-        return listOf(1, 2, 3)
+        return listOf("After School", lunchInt)
     }
-
-
 }
+
+private val AFTER_SCHOOL_QUIPS = listOf(
+    "School's out. Brain going into standby mode. Please leave a message after the beep...",
+    "Freedom bell! Time to activate 'do absolutely nothing' mode.",
+    "Brain: Accepting applications for enjoyable distractions only.",
+    "Time to skillfully transition from 'student' to 'professional doom-scroller'.",
+    "Homework? Yeah, that's happening right after... just five more minutes of doomscrolling.",
+    "Entering personal time. Productivity? Postponed due to urgent doomscrolling research.",
+    "School day over. Doomscrolling systems online and fully operational.",
+    "Achievement unlocked: Survived another school day. Reward: Unlocking next level of algorithm.",
+    "Entering personal time. Productivity? Optional. Highly optional.",
+    "Recharging brain. Process may involve copious amounts of… not homework.",
+    "Why are you here? School is over. You have plenty of time to do... nothing."
+)
+
+@Volatile
+private var cachedInMemoryQuip: String? = null
+
+@Volatile
+private var cachedInMemoryQuipTime: Instant? = null
+
+fun defaultQuip(): String = cachedInMemoryQuip ?: AFTER_SCHOOL_QUIPS.first()
+
 suspend fun afterSchoolQuips(context: Context): String {
     val cacheDurationHours = 1L
+    val now = Instant.now()
+
+    val memQuip = cachedInMemoryQuip
+    val memTime = cachedInMemoryQuipTime
+    if (!memQuip.isNullOrEmpty() && memTime != null && ChronoUnit.HOURS.between(memTime, now) < cacheDurationHours) {
+        return memQuip
+    }
+
     val myDataStoreManager = MyDataStoreManager(context)
-    val cachedQuip = myDataStoreManager.getData(stringPreferencesKey("CACHED_QUIP_KEY")).first().toString()
-    val cachedTimestamp = myDataStoreManager.getData(stringPreferencesKey("CACHE_QUIP_TIMESTAMP_KEY")).first()
+    val cachedQuip = myDataStoreManager.getCachedOrRead(CACHED_QUIP_KEY).orEmpty()
+    val cachedTimestamp = myDataStoreManager.getCachedOrRead(CACHE_QUIP_TIMESTAMP_KEY)
 
-    // Check if cache is valid
-    if (cachedQuip != "" && cachedTimestamp != null) {
-        val timestamp = Instant.parse(cachedTimestamp)
-        val now = Instant.now()
-        val hoursSinceCache = ChronoUnit.HOURS.between(timestamp, now)
-
-        if (hoursSinceCache < cacheDurationHours) {
-            // Use cached data if it's less than 1 hour old
+    if (cachedQuip.isNotEmpty() && cachedTimestamp != null) {
+        val timestamp = runCatching { Instant.parse(cachedTimestamp) }.getOrNull()
+        if (timestamp != null && ChronoUnit.HOURS.between(timestamp, now) < cacheDurationHours) {
+            cachedInMemoryQuip = cachedQuip
+            cachedInMemoryQuipTime = timestamp
             return cachedQuip
         }
     }
 
-    // If cache is invalid or missing, fetch new data
-
-    val afterSchoolQuips = listOf(
-        "School's out. Brain going into standby mode. Please leave a message after the beep...",
-        "Freedom bell! Time to activate 'do absolutely nothing' mode.", "Brain: Accepting applications for enjoyable distractions only.",
-        "Time to skillfully transition from 'student' to 'professional doom-scroller'.",
-        "Homework?  Yeah, that's happening right after... just five more minutes of doomscrolling.",
-        "Entering personal time.  Productivity?  Postponed due to urgent doomscrolling research.",
-        "School day over. Doomscrolling systems online and fully operational.  Prepare for targeted ads for things you just thought about.",
-        "Achievement unlocked: Survived another school day.  Reward: Unlocking next level of algorithm.",
-        "Entering personal time.  Productivity?  Optional. Highly optional.",
-        "Recharging brain. Process may involve copious amounts of… not homework.",
-        "Why are you here? School is over. You have plenty of time to do... nothing."
-    )
-        val afterSchoolQuip = afterSchoolQuips[(afterSchoolQuips.indices).random()]
-
-        // Save new data to cache
-        myDataStoreManager.saveData(stringPreferencesKey("CACHED_QUIP_KEY"), afterSchoolQuip)
-        myDataStoreManager.saveData(stringPreferencesKey("CACHE_QUIP_TIMESTAMP_KEY"), Instant.now().toString())
+    val afterSchoolQuip = AFTER_SCHOOL_QUIPS.random()
+    cachedInMemoryQuip = afterSchoolQuip
+    cachedInMemoryQuipTime = now
+    myDataStoreManager.saveData(CACHED_QUIP_KEY, afterSchoolQuip)
+    myDataStoreManager.saveData(CACHE_QUIP_TIMESTAMP_KEY, now.toString())
 
     return afterSchoolQuip
 }
 
-
-
-// Countdown timer logic
-suspend fun countdown(schedule: List<List<ScheduleBlock>>, processedEventId: String, lunchInt: Int, context: Context): String {
-    val myDataStoreManager = MyDataStoreManager(context)
-    val afterSchoolQuip =
-        if (processedEventId == "After School" || processedEventId == "Nothing")
-            afterSchoolQuips(context)
-        else
-            null
-
-    if (afterSchoolQuip != null){
-        myDataStoreManager.saveData(stringPreferencesKey("AFTER_SCHOOL"), "true")
-        return afterSchoolQuip
+suspend fun countdown(
+    schedule: List<List<ScheduleBlock>>,
+    processedEventId: String,
+    lunchInt: Int,
+    context: Context
+): String {
+    if (processedEventId == "After School" || processedEventId == "Nothing") {
+        val quip = afterSchoolQuips(context)
+        MyDataStoreManager(context).saveData(AFTER_SCHOOL_KEY, "true")
+        return quip
     }
 
-
-    val todaySchedule = schedule[lunchInt]
+    val todaySchedule = schedule.getOrElse(lunchInt) { schedule.firstOrNull().orEmpty() }
+    val now = LocalTime.now()
 
     for (block in todaySchedule) {
-        val now = LocalTime.now()
-        val eventStart = LocalTime.of(block.startHour, block.startMinute)
-        val eventEnd = LocalTime.of(block.endHour, block.endMinute)
+        val eventStart = block.startTime
+        val eventEnd = block.endTime
 
-
-        // Skip events that have ended
         if (now.isAfter(eventEnd)) {
             continue
         }
 
-        // Countdown until the event start
         if (now.isBefore(eventStart)) {
-
-            while (LocalTime.now().isBefore(eventStart)) {
-                val currentTime = LocalTime.now()
-                val timeUntilStart = ChronoUnit.SECONDS.between(currentTime, eventStart)
-                val minutes = timeUntilStart / 60
-                val seconds = timeUntilStart % 60
-
-                return("Time until start: ${"%02d".format(minutes)}:${"%02d".format(seconds)}")
-            }
+            val timeUntilStart = ChronoUnit.SECONDS.between(now, eventStart).coerceAtLeast(0L)
+            val minutes = timeUntilStart / 60
+            val seconds = timeUntilStart % 60
+            return "Time until start: ${"%02d".format(minutes)}:${"%02d".format(seconds)}"
         }
 
-        // Countdown during the event
-
-        while (LocalTime.now().isBefore(eventEnd)) {
-            val currentTime = LocalTime.now()
-            val timeUntilEnd = ChronoUnit.SECONDS.between(currentTime, eventEnd)
-            if (timeUntilEnd >= 3600) {
-                val hours = timeUntilEnd / 3600
-                val minutes = (timeUntilEnd / 60) - (hours * 60)
-                val seconds = timeUntilEnd % 60
-
-                return(
-                        "${"%1d".format(hours)}h ${"%02d".format(minutes)}m ${
-                            "%02d".format(
-                                seconds
-                            )
-                        }s \n Remaining in $processedEventId"
-                        )
-            } else {
-                val minutes = timeUntilEnd / 60
-                val seconds = timeUntilEnd % 60
-
-                return("${"%02d".format(minutes)}m ${
-                    "%02d".format(
-                        seconds
-                    )
-                }s \n Remaining in $processedEventId")
-            }
+        val timeUntilEnd = ChronoUnit.SECONDS.between(now, eventEnd).coerceAtLeast(0L)
+        return if (timeUntilEnd >= 3600) {
+            val hours = timeUntilEnd / 3600
+            val minutes = (timeUntilEnd / 60) - (hours * 60)
+            val seconds = timeUntilEnd % 60
+            "${"%1d".format(hours)}h ${"%02d".format(minutes)}m ${"%02d".format(seconds)}s \n Remaining in $processedEventId"
+        } else {
+            val minutes = timeUntilEnd / 60
+            val seconds = timeUntilEnd % 60
+            "${"%02d".format(minutes)}m ${"%02d".format(seconds)}s \n Remaining in $processedEventId"
         }
-
     }
-    return ("Calculation Timed Out")
+    return "Calculation Timed Out"
 }
 
-// Main Function: Fetch schedule and start the countdown
+fun formatedTimer(context: Context): Triple<String, String, String> = runBlocking {
+    val (scheduleResult, connection, statusInt) = ScheduleFetcher.fetchAndParseSchedule(context, false)
+    val status = statusInt.toString()
 
-fun formatedTimer(context: Context): Triple<String, String, String> {
-
-    val formatedTimer =
-        runBlocking {
-        val result = ScheduleFetcher.fetchAndParseSchedule(context, false)
-        val scheduleResult = result.first
-        val connection = result.second
-            val status = result.third.toString()
-
-
-
-        ((if (scheduleResult.isSuccess) {
-            val schedule = scheduleResult.getOrNull()
-            val returnedList: List<Any> = if (schedule != null) {
-                ScheduleFetcher.fetchPeriodLabels(context, schedule.toList())
-            } else listOf(1,2,3)
-            if (schedule.isNullOrEmpty()) {
-                arrayOf("No schedule available for today.", connection, status)
-            } else {
-                arrayOf(countdown(schedule, returnedList[0].toString(), returnedList[1] as Int, context), connection, status)
-                //processedEventId, lunchInt
-            }
+    if (scheduleResult.isSuccess) {
+        val schedule = scheduleResult.getOrNull()
+        if (schedule.isNullOrEmpty()) {
+            Triple("No schedule available for today.", connection, status)
         } else {
-            arrayOf("Failed to fetch the schedule: ${scheduleResult.exceptionOrNull()?.message}", connection, status)
-        }))
+            val returnedList = ScheduleFetcher.fetchPeriodLabels(context, schedule)
+            val text = countdown(schedule, returnedList[0].toString(), returnedList[1] as Int, context)
+            Triple(text, connection, status)
+        }
+    } else {
+        Triple(
+            "Failed to fetch the schedule: ${scheduleResult.exceptionOrNull()?.message}",
+            connection,
+            status
+        )
     }
-
-    return Triple(formatedTimer[0], formatedTimer[1], formatedTimer[2])
 }
