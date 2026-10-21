@@ -1,403 +1,481 @@
 package com.samstechlab.croomsbellschedule
 
-import android.content.Context
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.LargeTopAppBar
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
-import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.lerp as colorLerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import androidx.compose.ui.graphics.lerp as colorLerp // Alias for color lerp
 import androidx.compose.ui.unit.lerp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.samstechlab.compose.AppTheme
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun SettingsScreen() {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+fun SettingsScreen(
+    viewModel: MainViewModel = viewModel(),
+    bottomNavPadding: PaddingValues = PaddingValues(0.dp)
+) {
+    val prefs by viewModel.preferencesState.collectAsStateWithLifecycle()
+    val scrollBehavior =
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { Modifier.padding(0.dp)
+        topBar = {
             val collapsedFraction = scrollBehavior.state.collapsedFraction
-
-            // Smoothly interpolate color
             val interpolatedContainerColor = colorLerp(
                 start = MaterialTheme.colorScheme.background,
                 stop = MaterialTheme.colorScheme.surfaceContainer,
                 fraction = collapsedFraction
             )
-
-            // Smoothly interpolate font size
             val interpolatedFontSize = lerp(
                 start = MaterialTheme.typography.headlineLarge.fontSize,
                 stop = MaterialTheme.typography.titleLarge.fontSize,
                 fraction = collapsedFraction
             )
+
             LargeFlexibleTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = interpolatedContainerColor,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
                 title = {
                     Text(
-                       "Settings",
+                        text = "Settings",
                         fontSize = interpolatedFontSize,
+                        fontFamily = MaterialTheme.typography.headlineLarge.fontFamily,
+                        fontWeight = MaterialTheme.typography.headlineLarge.fontWeight,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
-
                 scrollBehavior = scrollBehavior
             )
-        },
-
+        }
     ) { innerPadding ->
-        ScrollContent(innerPadding)
+        SettingsContent(
+            prefs = prefs,
+            innerPadding = innerPadding,
+            bottomNavPadding = bottomNavPadding,
+            onLunchChanged = viewModel::updateLunchPreference,
+            onAltLunchChanged = viewModel::updateAltLunchPreference,
+            onPeriodNameChanged = viewModel::updatePeriodName,
+            onResetAllPeriods = viewModel::resetAllPeriodNames
+        )
     }
-
 }
 
-
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ScrollContent(innerPadding: PaddingValues) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope() // Get the coroutine scope here!
+fun SettingsContent(
+    prefs: UserPreferencesSnapshot,
+    innerPadding: PaddingValues,
+    bottomNavPadding: PaddingValues = PaddingValues(0.dp),
+    onLunchChanged: (String) -> Unit,
+    onAltLunchChanged: (String) -> Unit,
+    onPeriodNameChanged: (Int, String) -> Unit,
+    onResetAllPeriods: () -> Unit
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val focusManager = LocalFocusManager.current
+    val lunchOptions = remember { listOf("Lunch A", "Lunch B") }
 
-
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(innerPadding),
-        contentAlignment = Alignment.TopStart
-    ) { Column(Modifier
-        .fillMaxSize()
-        .padding(20.dp)
-        .verticalScroll(state = ScrollState(0), enabled = true, reverseScrolling = false)) {
-        Text(
-            "Lunch Period Selection",
-            modifier = Modifier.padding(10.dp),
-            style = LocalTextStyle.current
-        )
+            .padding(innerPadding)
+            .verticalScroll(rememberScrollState())
+            .padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = 112.dp + bottomNavPadding.calculateBottomPadding()
+            ),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Card 1: Lunch Period Selection
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.tertiaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Restaurant,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Lunch Schedule",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Select your assigned lunch wave",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
-        val myDataStoreManager = MyDataStoreManager(context)
-
-        val lunchPreferenceStr by myDataStoreManager.getData(stringPreferencesKey("lunch_preference")).collectAsState(initial = "0")
-        var lunchIndex by remember(lunchPreferenceStr) {
-            mutableIntStateOf(if (lunchPreferenceStr == "Lunch A") 0 else 1)
-        }
-
-        val altLunchPreferenceStr by myDataStoreManager.getData(stringPreferencesKey("alt_lunch_preference")).collectAsState(initial = "0")
-        var altlunchIndex by remember(altLunchPreferenceStr) {
-            mutableIntStateOf(if (altLunchPreferenceStr == "Lunch A") 0 else 1)
-        }
-
-        val p1 by myDataStoreManager.getData(stringPreferencesKey("p1")).collectAsState(initial = "Period 1")
-        val p2 by myDataStoreManager.getData(stringPreferencesKey("p2")).collectAsState(initial = "Period 2")
-        val p3 by myDataStoreManager.getData(stringPreferencesKey("p3")).collectAsState(initial = "Period 3")
-        val p4 by myDataStoreManager.getData(stringPreferencesKey("p4")).collectAsState(initial = "Period 4")
-        val p5 by myDataStoreManager.getData(stringPreferencesKey("p5")).collectAsState(initial = "Period 5")
-        val p6 by myDataStoreManager.getData(stringPreferencesKey("p6")).collectAsState(initial = "Period 6")
-        val p7 by myDataStoreManager.getData(stringPreferencesKey("p7")).collectAsState(initial = "Period 7")
-
-        var p1l by remember(p1) { mutableStateOf((if (p1 != "Period 1") p1 ?: "" else "")) }
-        var p2l by remember(p2) { mutableStateOf((if (p2 != "Period 2") p2 ?: "" else "")) }
-        var p3l by remember(p3) { mutableStateOf((if (p3 != "Period 3") p3 ?: "" else "")) }
-        var p4l by remember(p4) { mutableStateOf((if (p4 != "Period 4") p4 ?: "" else "")) }
-        var p5l by remember(p5) { mutableStateOf((if (p5 != "Period 5") p5 ?: "" else "")) }
-        var p6l by remember(p6) { mutableStateOf((if (p6 != "Period 6") p6 ?: "" else "")) }
-        var p7l by remember(p7) { mutableStateOf((if (p7 != "Period 7") p7 ?: "" else "")) }
-
-        var p1e by remember { mutableStateOf(true) }
-        var p2e by remember { mutableStateOf(true) }
-        var p3e by remember { mutableStateOf(true) }
-        var p4e by remember { mutableStateOf(true) }
-        var p5e by remember { mutableStateOf(true) }
-        var p6e by remember { mutableStateOf(true) }
-        var p7e by remember { mutableStateOf(true) }
-
-
-        val options = listOf("Lunch A", "Lunch B")
-        AnimatedVisibility(visible = true, enter = fadeIn()) {
-
-        }
-        SingleChoiceSegmentedButtonRow {
-            options.forEachIndexed { index, label ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                    label = { Text(label) },
-                    onClick = {
-                        lunchIndex = index
-                        coroutineScope.launch {
-                            myDataStoreManager.saveData(
-                                stringPreferencesKey("lunch_preference"),
-                                options[index]
-                            )
-                        }
-                    },
-                    selected = index == lunchIndex
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                 )
 
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Standard Days (Mon, Tue, Thu, Fri)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        lunchOptions.forEachIndexed { index, label ->
+                            val isSelected = prefs.lunchPreference == label
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = lunchOptions.size
+                                ),
+                                selected = isSelected,
+                                onClick = {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onLunchChanged(label)
+                                },
+                                icon = {
+                                    SegmentedButtonDefaults.Icon(active = isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SegmentedButtonDefaults.IconSize)
+                                        )
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Wednesday (Even Block Schedule)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        lunchOptions.forEachIndexed { index, label ->
+                            val isSelected = prefs.altLunchPreference == label
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = lunchOptions.size
+                                ),
+                                selected = isSelected,
+                                onClick = {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onAltLunchChanged(label)
+                                },
+                                icon = {
+                                    SegmentedButtonDefaults.Icon(active = isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SegmentedButtonDefaults.IconSize)
+                                        )
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        Text(
-            "Wednesday Lunch Period Selection",
-            modifier = Modifier.padding(10.dp),
-            style = LocalTextStyle.current
-        )
-
-        SingleChoiceSegmentedButtonRow {
-            options.forEachIndexed { index, label ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                    label = { Text(label) },
-                    onClick = {
-                        altlunchIndex = index
-                        coroutineScope.launch {
-                            myDataStoreManager.saveData(
-                                stringPreferencesKey("alt_lunch_preference"),
-                                options[index]
+        // Card 2: Custom Period Names
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.EditNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
-                    },
-                    selected = index == altlunchIndex
+                        Column {
+                            Text(
+                                text = "Period Labels",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Customize your class names",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            focusManager.clearFocus()
+                            onResetAllPeriods()
+                        },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.RestartAlt,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Reset",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                 )
 
+                for (periodNum in 1..8) {
+                    val defaultLabel = if (periodNum == 8) "Homeroom" else "Period $periodNum"
+                    val savedValue = prefs.periodNames[periodNum].orEmpty()
+                    val displayInitial = if (savedValue == defaultLabel) "" else savedValue
+
+                    PeriodLabelInputField(
+                        periodNumber = periodNum,
+                        externalValue = displayInitial,
+                        isLast = periodNum == 8,
+                        onValueCommitted = { newValue ->
+                            onPeriodNameChanged(periodNum, newValue)
+                        },
+                        onNextFocus = {
+                            if (periodNum < 8) {
+                                focusManager.moveFocus(FocusDirection.Down)
+                            } else {
+                                focusManager.clearFocus()
+                            }
+                        }
+                    )
+                }
             }
         }
 
-
-        Text("Period Names", modifier = Modifier.padding(10.dp), style = LocalTextStyle.current)
-        Row {
-            TextField(
-                value = (p1l),
-                onValueChange = {
-                    p1l = it
-                    coroutineScope.launch {
-                        myDataStoreManager.saveData(
-                            stringPreferencesKey("p1"),
-                            p1l
-                        )
-                    }
-                },
-                label = ({ Text("Period 1") })
-
-            )
-            Spacer(
-                Modifier.width(8.dp)
-            )
-            /*Switch(
-                checked = p1e,
-                onCheckedChange = { p1e = it }
-            )*/
-        }
-
-        Row {
-            TextField(
-                value = (p2l),
-                onValueChange = {
-                    p2l = it
-                    coroutineScope.launch {
-                        myDataStoreManager.saveData(
-                            stringPreferencesKey("p2"),
-                            p2l
-                        )
-                    }
-                },
-                label = ({ Text("Period 2") })
-
-            )
-            Spacer(
-                Modifier.width(8.dp)
-            )
-            /*Switch(
-            checked = p1e,
-            onCheckedChange = { p1e = it }
-                        )*/
-        }
-        Row {
-            TextField(
-                value = (p3l),
-                onValueChange = {
-                    p3l = it
-                    coroutineScope.launch {
-                        myDataStoreManager.saveData(
-                            stringPreferencesKey("p3"),
-                            p3l
-                        )
-                    }
-                },
-                label = ({ Text("Period 3") })
-
-            )
-            Spacer(
-                Modifier.width(8.dp)
-            )
-            /*Switch(
-                checked = p3e,
-                onCheckedChange = { p3e = it }
-            )*/
-        }
-
-        Row {
-            TextField(
-                value = (p4l),
-                onValueChange = {
-                    p4l = it
-                    coroutineScope.launch {
-                        myDataStoreManager.saveData(
-                            stringPreferencesKey("p4"),
-                            p4l
-                        )
-                    }
-                },
-                label = ({ Text("Period 4") })
-
-            )
-            Spacer(
-                Modifier.width(8.dp)
-            )
-            /*Switch(
-                checked = p4e,
-                onCheckedChange = { p4e = it }
-            )*/
-        }
-
-        Row {
-            TextField(
-                value = (p5l),
-                onValueChange = {
-                    p5l = it
-                    coroutineScope.launch {
-                        myDataStoreManager.saveData(
-                            stringPreferencesKey("p5"),
-                            p5l
-                        )
-                    }
-                },
-                label = ({ Text("Period 5") })
-
-            )
-            Spacer(
-                Modifier.width(8.dp)
-            )
-            /*Switch(
-                checked = p5e,
-                onCheckedChange = { p5e = it }
-            )*/
-        }
-
-        Row {
-            TextField(
-                value = (p6l),
-                onValueChange = {
-                    p6l = it
-                    coroutineScope.launch {
-                        myDataStoreManager.saveData(
-                            stringPreferencesKey("p6"),
-                            p6l
-                        )
-                    }
-                },
-                label = ({ Text("Period 6") })
-
-            )
-            Spacer(
-                Modifier.width(8.dp)
-            )
-            /*Switch(
-                checked = p6e,
-                onCheckedChange = { p6e = it }
-            )*/
-        }
-
-        Row {
-            TextField(
-                value = (p7l),
-                onValueChange = {
-                    p7l = it
-                    coroutineScope.launch {
-                        myDataStoreManager.saveData(
-                            stringPreferencesKey("p7"),
-                            p7l
-                        )
-                    }
-                },
-                label = ({ Text("Period 7") })
-
-            )
-            Spacer(
-                Modifier.width(8.dp)
-            )
-            /*Switch(
-                checked = p7e,
-                onCheckedChange = { p7e = it }
-            )*/
-        }
-    }
-
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
+@Composable
+private fun PeriodLabelInputField(
+    periodNumber: Int,
+    externalValue: String,
+    isLast: Boolean,
+    onValueCommitted: (String) -> Unit,
+    onNextFocus: () -> Unit
+) {
+    var textValue by remember(externalValue) { mutableStateOf(externalValue) }
+
+    // Debounce DataStore saves while typing to keep UI 120Hz smooth
+    LaunchedEffect(textValue) {
+        if (textValue != externalValue) {
+            delay(300L)
+            onValueCommitted(textValue)
+        }
+    }
+
+    val defaultTitle = if (periodNumber == 8) "Homeroom" else "Period $periodNumber"
+    val badgeLabel = if (periodNumber == 8) "HR" else "P$periodNumber"
+
+    OutlinedTextField(
+        value = textValue,
+        onValueChange = { textValue = it },
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        singleLine = true,
+        label = { Text(defaultTitle) },
+        placeholder = { Text("Default ($defaultTitle)") },
+        leadingIcon = {
+            Box(
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = badgeLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+        },
+        trailingIcon = {
+            if (textValue.isNotEmpty()) {
+                IconButton(
+                    onClick = {
+                        textValue = ""
+                        onValueCommitted("")
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Clear,
+                        contentDescription = "Clear $defaultTitle"
+                    )
+                }
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.Words,
+            imeAction = if (isLast) ImeAction.Done else ImeAction.Next
+        ),
+        keyboardActions = KeyboardActions(
+            onNext = { onNextFocus() },
+            onDone = { onNextFocus() }
+        )
+    )
+}
 
 @Composable
 @Preview(showBackground = true)
 fun SettingsScreenPreview() {
-    SettingsScreen()
+    AppTheme {
+        SettingsContent(
+            prefs = UserPreferencesSnapshot(
+                lunchPreference = "Lunch A",
+                altLunchPreference = "Lunch B",
+                periodNames = mapOf(1 to "AP Calculus", 2 to "Digital Design")
+            ),
+            innerPadding = PaddingValues(0.dp),
+            onLunchChanged = {},
+            onAltLunchChanged = {},
+            onPeriodNameChanged = { _, _ -> },
+            onResetAllPeriods = {}
+        )
+    }
 }

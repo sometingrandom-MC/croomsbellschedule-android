@@ -11,10 +11,10 @@ This is an app that utilizes the Crooms Bell Schedule API hosted by thealmighyde
 - Custom Period Labels
 - Lunch Period Selection
 - Material You UI
+- Full Schedule View
+- Countdown Widget
 
 ## Planned Features
 
-- Full Schedule View
 - Countdown Live Notification
-- Countdown Widget
 - Lunch Info
